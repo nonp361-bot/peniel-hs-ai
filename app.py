@@ -3,6 +3,7 @@ import google.generativeai as genai
 import pypdf
 import json
 import os
+import urllib.request  # 클라우드 한글 폰트 다운로드용 라이브러리 추가
 from io import BytesIO
 
 # --- PDF 생성 라이브러리 임포트 및 예외 처리 ---
@@ -25,20 +26,16 @@ st.set_page_config(
 )
 
 # --- 2. 로컬 채점 기준 보관 폴더(데이터베이스) 설정 ---
-# [클라우드 배포 패치] exist_ok=True를 설정하여 클라우드 서버 환경에서 FileExistsError가 발생하는 에러를 완벽히 해결합니다.
 CRITERIA_DB_DIR = "criteria_database"
 os.makedirs(CRITERIA_DB_DIR, exist_ok=True)
 
-# --- 3. 구글 Gemini API 인증 및 설정 (사이드바 정렬 개편) ---
-# [사이드바 1순위] 학교 정보 및 로그인 안내
+# --- 3. 구글 Gemini API 인증 및 설정 ---
 st.sidebar.markdown("<h1 style='text-align: center; font-size: 80px; margin-bottom: 0;'>🎓</h1>", unsafe_allow_html=True)
 st.sidebar.markdown("<h3 style='text-align: center; margin-top: 0; margin-bottom: 20px;'>브니엘고 AI 평가 시스템<br/>(2028학년도 표준 규격)</h3>", unsafe_allow_html=True)
 
-# 학교 이메일 로그인 상태 표시
 st.sidebar.info("🔒 학교 구글 워크스페이스 인증됨\n\n계정: teacher@peniel.hs.kr")
 st.sidebar.divider()
 
-# [사이드바 2순위] 목표 대학교 유형 설정
 st.sidebar.markdown("### 🎯 목표 대학교 유형 설정")
 target_university_group = st.sidebar.selectbox(
     "학생의 목표 대학 그룹을 선택하세요.",
@@ -48,11 +45,8 @@ target_university_group = st.sidebar.selectbox(
 )
 st.sidebar.divider()
 
-# [사이드바 3순위] 구글 API 키 자동 인증 로직
-# 로컬 환경(api_key.txt 존재 시) 또는 웹 배포 환경(st.secrets 존재 시) 모두를 완벽히 연동 및 대응합니다.
-HARDCODED_API_KEY = "" # 깃허브 보안 탐지를 피하기 위해 비워둡니다.
+HARDCODED_API_KEY = "" 
 
-# 1. 파일에서 읽기 시도 (로컬 바탕화면용)
 local_key_file = "api_key.txt"
 api_key = ""
 if os.path.exists(local_key_file):
@@ -62,16 +56,13 @@ if os.path.exists(local_key_file):
     except Exception:
         pass
 
-# 2. 파일에 키가 없으면 Streamlit Secrets 비밀 금고에서 읽기 시도 (웹 배포 사이트용)
 if not api_key:
     try:
-        # st.secrets 내부에 GEMINI_API_KEY 키값 존재 여부를 안전하게 검사합니다.
         if "GEMINI_API_KEY" in st.secrets:
             api_key = st.secrets["GEMINI_API_KEY"]
     except Exception:
         pass
 
-# 3. 마지막 수단: 직접 입력받기 (API 키가 어디에도 설정되지 않았을 경우에만 화면에 표시)
 if not api_key:
     api_key = st.sidebar.text_input("🔑 구글 Gemini API 키를 입력하세요", type="password")
     if api_key:
@@ -80,13 +71,11 @@ if not api_key:
     else:
         st.sidebar.warning("⚠️ 서비스를 이용하려면 구글 API 키를 설정해야 합니다.")
 else:
-    # API 키가 감지된 경우 입력창을 숨기고 자동으로 최우선 로그인 처리합니다.
     genai.configure(api_key=api_key)
     st.sidebar.success("🔑 구글 클라우드 API 자동 인증 완료!")
 
 st.sidebar.divider()
 
-# [사이드바 4순위] AI 엔진 모델 설정
 st.sidebar.markdown("### 🤖 AI 엔진 모델 설정")
 model_option = st.sidebar.selectbox(
     "사용할 Gemini 모델을 선택하세요.",
@@ -97,7 +86,6 @@ model_option = st.sidebar.selectbox(
 
 st.sidebar.divider()
 
-# 누적식 대학교 입시요강/채점기준 관리 데이터베이스
 st.sidebar.markdown("### ⚙️ 대학별 입시요강 관리")
 
 uploaded_criteria = st.sidebar.file_uploader(
@@ -115,10 +103,8 @@ if uploaded_criteria:
                 f.write(file.getbuffer())
     st.sidebar.success("💾 파일이 학교 데이터베이스에 누적 보관되었습니다!")
 
-# 누적된 파일 목록 불러오기
 accumulated_files = os.listdir(CRITERIA_DB_DIR)
 
-# 파일 선택 기능
 selected_criteria_files = []
 if accumulated_files:
     st.sidebar.markdown("**📌 반영할 대학교 가이드라인 선택**")
@@ -126,7 +112,6 @@ if accumulated_files:
         if st.sidebar.checkbox(file_name, value=True, key=f"check_{file_name}"):
             selected_criteria_files.append(file_name)
     
-    # 누적된 가이드라인 초기화/삭제 버튼
     if st.sidebar.button("🗑️ 선택한 기준 보관함에서 삭제", type="secondary"):
         for file_name in accumulated_files:
             if f"check_{file_name}" in st.session_state and st.session_state[f"check_{file_name}"]:
@@ -135,36 +120,36 @@ if accumulated_files:
 else:
     st.sidebar.caption("ℹ️ 보관함이 비어 있습니다. 입시요강을 올려서 채우세요.")
 
-# --- 4. 시스템 폰트 탐색 함수 (한글 깨짐 방지용) ---
-def find_korean_font():
+# --- 4. 시스템 폰트 탐색 및 자동 다운로드 함수 (한글 깨짐 해결용) ---
+def get_korean_font_path():
+    local_font_name = "NanumGothic.ttf"
+    if os.path.exists(local_font_name):
+        return local_font_name
+
     paths = [
-        "C:\\Windows\\Fonts\\malgun.ttf",       # 맑은 고딕
-        "C:\\Windows\\Fonts\\malgunbd.ttf",     # 맑은 고딕 Bold
-        "C:\\Windows\\Fonts\\gulim.ttc",        # 굴림
-        "C:\\Windows\\Fonts\\batang.ttc",       # 바탕
-        "/System/Library/Fonts/Supplemental/AppleGothic.ttf",
+        "C:\\Windows\\Fonts\\malgun.ttf",       # Windows 맑은 고딕
+        "C:\\Windows\\Fonts\\malgunbd.ttf",     # Windows 맑은 고딕 Bold
+        "/System/Library/Fonts/Supplemental/AppleGothic.ttf", # Mac 애플고딕
         "/Library/Fonts/AppleGothic.ttf",
         "/System/Library/Fonts/Supplemental/AppleSDGothicNeo.ttc",
-        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf", # Linux 나눔고딕
         "/usr/share/fonts/truetype/nanum/NanumBarunGothic.ttf",
         "/usr/share/fonts/truetype/fonts-nanum/NanumGothic.ttf",
     ]
     for p in paths:
         if os.path.exists(p):
             return p
-    if os.path.exists("C:\\Windows\\Fonts"):
-        for f in os.listdir("C:\\Windows\\Fonts"):
-            if f.lower().endswith(".ttf") or f.lower().endswith(".ttc"):
-                return os.path.join("C:\\Windows\\Fonts", f)
-    mac_font_dir = "/System/Library/Fonts"
-    if os.path.exists(mac_font_dir):
-        for root, dirs, files in os.walk(mac_font_dir):
-            for f in files:
-                if f.lower().endswith(".ttf") or f.lower().endswith(".ttc"):
-                    return os.path.join(root, f)
+
+    font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
+    try:
+        urllib.request.urlretrieve(font_url, local_font_name)
+        if os.path.exists(local_font_name):
+            return local_font_name
+    except Exception as e:
+        st.sidebar.warning(f"⚠️ 시스템 내 한글 폰트 인식이 불가하여 자동 다운로드를 시도했으나 실패했습니다: {e}")
     return None
 
-# --- 5. PDF 보고서 작성 로직 (ReportLab 연동 - 2028 대입 정밀 10대 지표 지원 버전) ---
+# --- 5. PDF 보고서 작성 로직 ---
 def generate_pdf_report(result, student_filename, target_group):
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -176,7 +161,7 @@ def generate_pdf_report(result, student_filename, target_group):
         bottomMargin=40
     )
     
-    font_path = find_korean_font()
+    font_path = get_korean_font_path()
     font_name = "Helvetica"
     if font_path:
         try:
@@ -332,16 +317,16 @@ def generate_pdf_report(result, student_filename, target_group):
     
     table_data = [
         [Paragraph("<b>평가 역량 대분류</b>", body_style), Paragraph("<b>세부 정밀 평가 지표 (100점 만점 기준)</b>", body_style), Paragraph("<b>취득 점수 (소수점 정밀계산)</b>", body_style)],
-        [Paragraph("<b>I. 학업역량 (40점)</b>", body_style), Paragraph("1. 성취도 분포 및 이수 환경의 상대적 우위성 (15점 만점)", body_style), Paragraph(f"<b>{result.get('score_achievement_15', '0.0')} / 15.0</b>", body_style)],
-        [Paragraph("", body_style), Paragraph("2. 행동 동기 및 어려움 극복 서사 기반 학업태도 (10점 만점)", body_style), Paragraph(f"<b>{result.get('score_academic_attitude_10', '0.0')} / 10.0</b>", body_style)],
-        [Paragraph("", body_style), Paragraph("3. 디지털 리터러시 및 비판적 미디어 탐구 역량 (15점 만점)", body_style), Paragraph(f"<b>{result.get('score_digital_literacy_15', '0.0')} / 15.0</b>", body_style)],
-        [Paragraph("<b>II. 진로역량 (40점)</b>", body_style), Paragraph("4. 전공 연계 교과의 위계적 이수 노력 및 동기 (10점 만점)", body_style), Paragraph(f"<b>{result.get('score_major_selection_10', '0.0')} / 10.0</b>", body_style)],
-        [Paragraph("", body_style), Paragraph("5. 전공 관련 주요 교과 성취도 차별성 및 전공적 사고 (10점 만점)", body_style), Paragraph(f"<b>{result.get('score_major_grades_10', '0.0')} / 10.0</b>", body_style)],
-        [Paragraph("", body_style), Paragraph("6. 교과-창체 연계 진로 에피소드 및 비판적 독해 (20점 만점)", body_style), Paragraph(f"<b>{result.get('score_career_experience_20', '0.0')} / 20.0</b>", body_style)],
-        [Paragraph("<b>III. 공동체역량 (20점)</b>", body_style), Paragraph("7. 다원적 환경에서의 실질적 협업 및 소통 역량 (6점 만점)", body_style), Paragraph(f"<b>{result.get('score_collab_6', '0.0')} / 6.0</b>", body_style)],
-        [Paragraph("", body_style), Paragraph("8. 특정 대상을 도운 구체적 나눔과 배려 (4점 만점)", body_style), Paragraph(f"<b>{result.get('score_sharing_4', '0.0')} / 4.0</b>", body_style)],
-        [Paragraph("", body_style), Paragraph("9. 무단 지각/결석 배제 성실성 및 성품 행특 근거 (5점 만점)", body_style), Paragraph(f"<b>{result.get('score_sincerity_5', '0.0')} / 5.0</b>", body_style)],
-        [Paragraph("", body_style), Paragraph("10. 과정 중심 조율 과정 입증 리더십 및 자발 주도성 (5점 만점)", body_style), Paragraph(f"<b>{result.get('score_leadership_5', '0.0')} / 5.0</b>", body_style)],
+        [Paragraph("<b>I. 학업역량 (40점)</b>", body_style), Paragraph("1. 성취도 분포 및 이수 환경의 상대적 우위성 (15점 만점)", body_style), Paragraph(f"<b>{result.get('score_achievement_15', '0.0')}</b>", body_style)],
+        [Paragraph("", body_style), Paragraph("2. 행동 동기 및 어려움 극복 서사 기반 학업태도 (10점 만점)", body_style), Paragraph(f"<b>{result.get('score_academic_attitude_10', '0.0')}</b>", body_style)],
+        [Paragraph("", body_style), Paragraph("3. 디지털 리터러시 및 비판적 미디어 탐구 역량 (15점 만점)", body_style), Paragraph(f"<b>{result.get('score_digital_literacy_15', '0.0')}</b>", body_style)],
+        [Paragraph("<b>II. 진로역량 (40점)</b>", body_style), Paragraph("4. 전공 연계 교과의 위계적 이수 노력 및 동기 (10점 만점)", body_style), Paragraph(f"<b>{result.get('score_major_selection_10', '0.0')}</b>", body_style)],
+        [Paragraph("", body_style), Paragraph("5. 전공 관련 주요 교과 성취도 차별성 및 전공적 사고 (10점 만점)", body_style), Paragraph(f"<b>{result.get('score_major_grades_10', '0.0')}</b>", body_style)],
+        [Paragraph("", body_style), Paragraph("6. 교과-창체 연계 진로 에피소드 및 비판적 독해 (20점 만점)", body_style), Paragraph(f"<b>{result.get('score_career_experience_20', '0.0')}</b>", body_style)],
+        [Paragraph("<b>III. 공동체역량 (20점)</b>", body_style), Paragraph("7. 다원적 환경에서의 실질적 협업 및 소통 역량 (6점 만점)", body_style), Paragraph(f"<b>{result.get('score_collab_6', '0.0')}</b>", body_style)],
+        [Paragraph("", body_style), Paragraph("8. 특정 대상을 도운 구체적 나눔과 배려 (4점 만점)", body_style), Paragraph(f"<b>{result.get('score_sharing_4', '0.0')}</b>", body_style)],
+        [Paragraph("", body_style), Paragraph("9. 무단 지각/결석 배제 성실성 및 성품 행특 근거 (5점 만점)", body_style), Paragraph(f"<b>{result.get('score_sincerity_5', '0.0')}</b>", body_style)],
+        [Paragraph("", body_style), Paragraph("10. 과정 중심 조율 과정 입증 리더십 및 자발 주도성 (5점 만점)", body_style), Paragraph(f"<b>{result.get('score_leadership_5', '0.0')}</b>", body_style)],
         [Paragraph("<b>✨ 합계 총점</b>", body_style), Paragraph("<b>모든 평가지표 합산 종합 환산점수 (보수적 사정관 컷)</b>", body_style), Paragraph(f"<b><font color='#EF4444'>{result.get('score_total', '0.0')} / 100</font></b>", body_style)]
     ]
     
@@ -566,7 +551,19 @@ elif api_key and student_file:
             """
 
             try:
-                model = genai.GenerativeModel(model_option)
+                # [일관성/결과 동일 보정 패치] 
+                # 동일한 생기부 업로드 시 결과 변동이 발생하지 않도록 Temperature(온도)를 0.0으로 절대 강제 설정합니다.
+                # 이를 통해 무작위성을 차단하고, 수학적 분석 논리 및 고정 루브릭 규칙에 맞춰 언제나 완전히 일률적이고 신뢰성 높은 결과만을 매칭하여 출력합니다.
+                generation_config = {
+                    "temperature": 0.0,
+                    "top_p": 1.0,
+                    "top_k": 1,
+                }
+                
+                model = genai.GenerativeModel(
+                    model_name=model_option,
+                    generation_config=generation_config
+                )
                 response = model.generate_content(prompt)
                 
                 response_text = response.text.strip()
