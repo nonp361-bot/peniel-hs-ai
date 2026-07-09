@@ -29,7 +29,7 @@ st.set_page_config(
 CRITERIA_DB_DIR = "criteria_database"
 os.makedirs(CRITERIA_DB_DIR, exist_ok=True)
 
-# --- 3. 구글 Gemini API 인증 및 설정 ---
+# --- 3. 구글 Gemini API 인증 및 설정 (사이드바 정렬 개편) ---
 st.sidebar.markdown("<h1 style='text-align: center; font-size: 80px; margin-bottom: 0;'>🎓</h1>", unsafe_allow_html=True)
 st.sidebar.markdown("<h3 style='text-align: center; margin-top: 0; margin-bottom: 20px;'>브니엘고 AI 평가 시스템<br/>(2028학년도 표준 규격)</h3>", unsafe_allow_html=True)
 
@@ -149,7 +149,7 @@ def get_korean_font_path():
         st.sidebar.warning(f"⚠️ 시스템 내 한글 폰트 인식이 불가하여 자동 다운로드를 시도했으나 실패했습니다: {e}")
     return None
 
-# --- 5. PDF 보고서 작성 로직 ---
+# --- 5. PDF 보고서 작성 로직 (ReportLab 연동 - 겹침 및 중복 오차 완벽 해결 버전) ---
 def generate_pdf_report(result, student_filename, target_group):
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -201,8 +201,8 @@ def generate_pdf_report(result, student_filename, target_group):
         fontSize=11,
         leading=15,
         textColor=colors.HexColor('#1E3A8A'),
-        spaceBefore=10,
-        spaceAfter=5,
+        spaceBefore=12,
+        spaceAfter=6,
         keepWithNext=True
     )
     
@@ -220,54 +220,24 @@ def generate_pdf_report(result, student_filename, target_group):
         'EvidenceTitle',
         parent=styles['Normal'],
         fontName=font_name,
-        fontSize=8,
-        leading=10,
-        textColor=colors.HexColor('#B45309'),
-        fontStyle='Bold',
-        spaceAfter=2,
-        keepWithNext=True
-    )
-
-    evidence_style = ParagraphStyle(
-        'Evidence',
-        parent=styles['Normal'],
-        fontName=font_name,
-        fontSize=8,
+        fontSize=8.5,
         leading=11,
-        textColor=colors.HexColor('#451A03'),
-        backColor=colors.HexColor('#FEF3C7'),
-        borderColor=colors.HexColor('#F59E0B'),
-        borderWidth=0.5,
-        borderPadding=5,
-        spaceAfter=6,
-        borderRadius=3
+        textColor=colors.HexColor('#B45309'),
+        spaceBefore=8,
+        spaceAfter=3,
+        keepWithNext=True
     )
 
     feedback_title_style = ParagraphStyle(
         'FeedbackTitle',
         parent=styles['Normal'],
         fontName=font_name,
-        fontSize=8,
-        leading=10,
-        textColor=colors.HexColor('#B91C1C'),
-        fontStyle='Bold',
-        spaceAfter=2,
-        keepWithNext=True
-    )
-
-    feedback_style = ParagraphStyle(
-        'Feedback',
-        parent=styles['Normal'],
-        fontName=font_name,
-        fontSize=8,
+        fontSize=8.5,
         leading=11,
-        textColor=colors.HexColor('#7F1D1D'),
-        backColor=colors.HexColor('#FEF2F2'),
-        borderColor=colors.HexColor('#EF4444'),
-        borderWidth=0.5,
-        borderPadding=5,
-        spaceAfter=8,
-        borderRadius=3
+        textColor=colors.HexColor('#B91C1C'),
+        spaceBefore=8,
+        spaceAfter=3,
+        keepWithNext=True
     )
 
     audit_title_style = ParagraphStyle(
@@ -277,35 +247,32 @@ def generate_pdf_report(result, student_filename, target_group):
         fontSize=8.5,
         leading=11,
         textColor=colors.HexColor('#7C3AED'),
-        fontStyle='Bold',
-        spaceAfter=2,
+        spaceBefore=8,
+        spaceAfter=3,
         keepWithNext=True
     )
 
-    audit_style = ParagraphStyle(
-        'Audit',
-        parent=styles['Normal'],
-        fontName=font_name,
-        fontSize=8,
-        leading=11,
-        textColor=colors.HexColor('#4C1D95'),
-        backColor=colors.HexColor('#F5F3FF'),
-        borderColor=colors.HexColor('#8B5CF6'),
-        borderWidth=0.5,
-        borderPadding=5,
-        spaceAfter=10,
-        borderRadius=3
-    )
-    
-    footer_style = ParagraphStyle(
-        'Footer',
-        parent=styles['Normal'],
-        fontName=font_name,
-        fontSize=7,
-        leading=9,
-        textColor=colors.HexColor('#9CA3AF'),
-        alignment=1
-    )
+    # [테두리 겹침 철저 배제] 테이블 래핑 방식으로 Callout 박스를 렌더링하는 헬퍼 함수 정의
+    # 가로 총 너비: 515포인트 (A4 여백 보정 적용)
+    def create_callout_box(text, bg_color_hex, border_color_hex, text_color_hex, font_size=8, leading=12):
+        inner_style = ParagraphStyle(
+            'CalloutInner',
+            fontName=font_name,
+            fontSize=font_size,
+            leading=leading,
+            textColor=colors.HexColor(text_color_hex)
+        )
+        p = Paragraph(text, inner_style)
+        t = Table([[p]], colWidths=[515])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor(bg_color_hex)),
+            ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor(border_color_hex)),
+            ('TOPPADDING', (0,0), (-1,-1), 6),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+            ('LEFTPADDING', (0,0), (-1,-1), 8),
+            ('RIGHTPADDING', (0,0), (-1,-1), 8),
+        ]))
+        return t
     
     story = []
     
@@ -315,6 +282,7 @@ def generate_pdf_report(result, student_filename, target_group):
     
     story.append(Paragraph("📊 2028학년도 개정 핵심 10대 지표별 스코어 카드", h1_style))
     
+    # 가로 총 너비 515포인트 규격과 완벽하게 매칭되는 120 + 275 + 120 그리드 테이블 설계
     table_data = [
         [Paragraph("<b>평가 역량 대분류</b>", body_style), Paragraph("<b>세부 정밀 평가 지표 (100점 만점 기준)</b>", body_style), Paragraph("<b>취득 점수 (소수점 정밀계산)</b>", body_style)],
         [Paragraph("<b>I. 학업역량 (40점)</b>", body_style), Paragraph("1. 성취도 분포 및 이수 환경의 상대적 우위성 (15점 만점)", body_style), Paragraph(f"<b>{result.get('score_achievement_15', '0.0')}</b>", body_style)],
@@ -330,7 +298,7 @@ def generate_pdf_report(result, student_filename, target_group):
         [Paragraph("<b>✨ 합계 총점</b>", body_style), Paragraph("<b>모든 평가지표 합산 종합 환산점수 (보수적 사정관 컷)</b>", body_style), Paragraph(f"<b><font color='#EF4444'>{result.get('score_total', '0.0')} / 100</font></b>", body_style)]
     ]
     
-    summary_table = Table(table_data, colWidths=[110, 270, 110])
+    summary_table = Table(table_data, colWidths=[120, 275, 120])
     summary_table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F3F4F6')),
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
@@ -338,8 +306,8 @@ def generate_pdf_report(result, student_filename, target_group):
         ('SPAN', (0,1), (0,3)),
         ('SPAN', (0,4), (0,6)),
         ('SPAN', (0,7), (0,10)),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
-        ('TOPPADDING', (0,0), (-1,-1), 3),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')),
         ('BACKGROUND', (0,11), (-1,11), colors.HexColor('#FEF2F2')),
     ]))
@@ -351,43 +319,47 @@ def generate_pdf_report(result, student_filename, target_group):
     audit_data = result.get("ai_pollution_audit", {})
     audit_risk = audit_data.get("risk_level", "보통(안전)")
     audit_verdict = audit_data.get("audit_verdict", "AI 작성 의심 에피소드가 확인되지 않았습니다.")
-    story.append(Paragraph(f"<b>AI 오염 위험도:</b> <font color='#7C3AED'>{audit_risk}</font> | <b>의심 영역:</b> {audit_data.get('suspected_areas', '없음')}", body_style))
+    story.append(Paragraph(f"<b>• AI 오염 위험도:</b> <font color='#7C3AED'>{audit_risk}</font>  |  <b>• 의심 영역:</b> {audit_data.get('suspected_areas', '없음')}", body_style))
+    story.append(Spacer(1, 4))
     story.append(Paragraph("<b>사정관 연합 감리 위원회 서평 및 신뢰도 검토 의견:</b>", audit_title_style))
-    story.append(Paragraph(audit_verdict, audit_style))
-    story.append(Spacer(1, 5))
+    story.append(create_callout_box(audit_verdict, '#F5F3FF', '#8B5CF6', '#4C1D95'))
+    story.append(Spacer(1, 10))
     
     story.append(Paragraph("🔍 평가 지표별 세부 분석 및 냉철한 쓴소리 솔루션", h1_style))
     
+    # --- 학업 역량 세부 정보 ---
     story.append(Paragraph("<b>[학업 역량 및 디지털 탐구 정성 진단 (배점: 40점)]</b>", body_style))
     story.append(Paragraph(f"성취도/태도 진단: {result.get('reason_academic_core', '분석 누락')}", body_style))
     if result.get('evidence_academic_core'):
-        story.append(Paragraph("🎯 매칭된 학생부 원문 근거 (블룸 인지영역 대조)", evidence_title_style))
-        story.append(Paragraph(f'"{result["evidence_academic_core"]}"', evidence_style))
+        story.append(Paragraph("<b>🎯 매칭된 학생부 원문 근거 (블룸 인지영역 대조)</b>", evidence_title_style))
+        story.append(create_callout_box(f'"{result["evidence_academic_core"]}"', '#FEF3C7', '#F59E0B', '#451A03'))
     if result.get('improvement_academic_core'):
-        story.append(Paragraph("⚠️ 학업 역량 돌파를 위한 뼈아픈 조언 및 심화과제 지침", feedback_title_style))
-        story.append(Paragraph(result['improvement_academic_core'], feedback_style))
-    story.append(Spacer(1, 3))
+        story.append(Paragraph("<b>⚠️ 학업 역량 돌파를 위한 뼈아픈 조언 및 심화과제 지침</b>", feedback_title_style))
+        story.append(create_callout_box(result['improvement_academic_core'], '#FEF2F2', '#EF4444', '#7F1D1D'))
+    story.append(Spacer(1, 10))
     
+    # --- 진로 역량 세부 정보 ---
     story.append(Paragraph("<b>[진로 역량 및 전공교과 위계성 진단 (배점: 40점)]</b>", body_style))
     story.append(Paragraph(f"진로/교과 설계 진단: {result.get('reason_career_core', '분석 누락')}", body_style))
     if result.get('evidence_career_core'):
-        story.append(Paragraph("🎯 매칭된 학생부 원문 근거 (위계성 및 독해력 대조)", evidence_title_style))
-        story.append(Paragraph(f'"{result["evidence_career_core"]}"', evidence_style))
+        story.append(Paragraph("<b>🎯 매칭된 학생부 원문 근거 (위계성 및 독해력 대조)</b>", evidence_title_style))
+        story.append(create_callout_box(f'"{result["evidence_career_core"]}"', '#FEF3C7', '#F59E0B', '#451A03'))
     if result.get('improvement_career_core'):
-        story.append(Paragraph("⚠️ 진로 역량 돌파를 위한 뼈아픈 조언 및 고난도 연구 추천 소주제", feedback_title_style))
-        story.append(Paragraph(result['improvement_career_core'], feedback_style))
-    story.append(Spacer(1, 3))
+        story.append(Paragraph("<b>⚠️ 진로 역량 돌파를 위한 뼈아픈 조언 및 고난도 연구 추천 소주제</b>", feedback_title_style))
+        story.append(create_callout_box(result['improvement_career_core'], '#FEF2F2', '#EF4444', '#7F1D1D'))
+    story.append(Spacer(1, 10))
 
+    # --- 공동체 역량 세부 정보 ---
     story.append(Paragraph("<b>[공동체 역량 및 자발적 리더십 진단 (배점: 20점)]</b>", body_style))
     story.append(Paragraph(f"공동체성/리더십 진단: {result.get('reason_social_core', '분석 누락')}", body_style))
     if result.get('evidence_social_core'):
-        story.append(Paragraph("🎯 매칭된 학생부 원문 근거 (다원적 협업 및 조율 에피소드)", evidence_title_style))
-        story.append(Paragraph(f'"{result["evidence_social_core"]}"', evidence_style))
+        story.append(Paragraph("<b>🎯 매칭된 학생부 원문 근거 (다원적 협업 및 조율 에피소드)</b>", evidence_title_style))
+        story.append(create_callout_box(f'"{result["evidence_social_core"]}"', '#FEF3C7', '#F59E0B', '#451A03'))
     if result.get('improvement_social_core'):
-        story.append(Paragraph("⚠️ 인성/성실성 영역 감점 요인 지적 및 보완 행동 제언", feedback_title_style))
-        story.append(Paragraph(result['improvement_social_core'], feedback_style))
+        story.append(Paragraph("<b>⚠️ 인성/성실성 영역 감점 요인 지적 및 보완 행동 제언</b>", feedback_title_style))
+        story.append(create_callout_box(result['improvement_social_core'], '#FEF2F2', '#EF4444', '#7F1D1D'))
 
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 12))
     story.append(Paragraph("본 보고서에 출력된 가상 시뮬레이션 및 데이터는 브니엘고등학교 AI 생기부 평가 시스템의<br/>개인정보 전량 즉시 파기(Transient Data) 안전 규정에 따라 세션이 종료되는 순간 완벽하게 제거됩니다.", footer_style))
     
     doc.build(story)
@@ -551,9 +523,6 @@ elif api_key and student_file:
             """
 
             try:
-                # [일관성/결과 동일 보정 패치] 
-                # 동일한 생기부 업로드 시 결과 변동이 발생하지 않도록 Temperature(온도)를 0.0으로 절대 강제 설정합니다.
-                # 이를 통해 무작위성을 차단하고, 수학적 분석 논리 및 고정 루브릭 규칙에 맞춰 언제나 완전히 일률적이고 신뢰성 높은 결과만을 매칭하여 출력합니다.
                 generation_config = {
                     "temperature": 0.0,
                     "top_p": 1.0,
