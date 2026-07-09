@@ -25,48 +25,12 @@ st.set_page_config(
 )
 
 # --- 2. 로컬 채점 기준 보관 폴더(데이터베이스) 설정 ---
+# [클라우드 배포 패치] exist_ok=True를 설정하여 클라우드 서버 환경에서 FileExistsError가 발생하는 에러를 완벽히 해결합니다.
 CRITERIA_DB_DIR = "criteria_database"
-if not os.path.exists(CRITERIA_DB_DIR):
-    os.makedirs(CRITERIA_DB_DIR)
-
-# --- STREAMING_CHUNK: Setting up Google Gemini API Authorization... ---
-# 💡 [보안 및 편의성 꿀팁!] 
-# 아래 큰따옴표 안에 구글 API 키('AIzaSy...')를 붙여넣어 두시면, 
-# 앞으로 귀찮은 입력창 없이 사이트 접속 즉시 자동 가동됩니다!
-# (향후 웹사이트로 배포할 때는 Streamlit Secrets에 저장하므로 자동 호환됩니다.)
-HARDCODED_API_KEY = "" 
-
-# API 키 감지 프로토콜 (웹 배포용 Secrets -> 로컬 파일 -> 로컬 하드코딩 -> 수동 입력 순으로 인식)
-api_key = ""
-is_automated = False
-
-# [에러 해결 패치] 로컬 환경에 secrets.toml 파일이 아예 없을 때의 예외 처리를 완벽하게 차단합니다.
-try:
-    if "GEMINI_API_KEY" in st.secrets:
-        api_key = st.secrets["GEMINI_API_KEY"]
-        is_automated = True
-except Exception:
-    # secrets가 정의되지 않은 일반 로컬 환경에서는 에러를 뿜지 않고 부드럽게 무시하고 지나갑니다.
-    pass
-
-# [자동화 개선 패치 1] 동일한 폴더에 'api_key.txt'가 있다면 자동으로 불러와 로그인 처리
-if not is_automated:
-    if os.path.exists("api_key.txt"):
-        try:
-            with open("api_key.txt", "r", encoding="utf-8") as f:
-                local_key = f.read().strip()
-                if local_key:
-                    api_key = local_key
-                    is_automated = True
-        except Exception:
-            pass
-
-# [자동화 개선 패치 2] 만약 웹 Secrets도 없고 파일도 없으나 하드코딩 키가 적혀있는 경우 자동 인증 처리
-if not is_automated and HARDCODED_API_KEY.strip():
-    api_key = HARDCODED_API_KEY
-    is_automated = True
+os.makedirs(CRITERIA_DB_DIR, exist_ok=True)
 
 # --- 3. 구글 Gemini API 인증 및 설정 (사이드바 정렬 개편) ---
+# [사이드바 1순위] 학교 정보 및 로그인 안내
 st.sidebar.markdown("<h1 style='text-align: center; font-size: 80px; margin-bottom: 0;'>🎓</h1>", unsafe_allow_html=True)
 st.sidebar.markdown("<h3 style='text-align: center; margin-top: 0; margin-bottom: 20px;'>브니엘고 AI 평가 시스템<br/>(2028학년도 표준 규격)</h3>", unsafe_allow_html=True)
 
@@ -74,7 +38,7 @@ st.sidebar.markdown("<h3 style='text-align: center; margin-top: 0; margin-bottom
 st.sidebar.info("🔒 학교 구글 워크스페이스 인증됨\n\n계정: teacher@peniel.hs.kr")
 st.sidebar.divider()
 
-# [사이드바 1순위] 목표 대학교 유형 설정
+# [사이드바 2순위] 목표 대학교 유형 설정
 st.sidebar.markdown("### 🎯 목표 대학교 유형 설정")
 target_university_group = st.sidebar.selectbox(
     "학생의 목표 대학 그룹을 선택하세요.",
@@ -84,24 +48,45 @@ target_university_group = st.sidebar.selectbox(
 )
 st.sidebar.divider()
 
-# [사이드바 2순위] 구글 API 키 처리
-if is_automated:
-    # 이미 등록된 키가 있으면 안전하다는 녹색 성공 알림만 노출 (텍스트창 숨김으로 보안 유지)
-    st.sidebar.success("🔑 구글 클라우드 API 자동 인증 완료!")
-    genai.configure(api_key=api_key)
-else:
-    # 키가 코드나 서버에 저장되지 않은 경우에만 화면에 입력창 표시
-    api_key_input = st.sidebar.text_input("🔑 구글 Gemini API 키를 입력하세요", type="password")
-    if api_key_input:
-        genai.configure(api_key=api_key_input)
-        api_key = api_key_input
+# [사이드바 3순위] 구글 API 키 자동 인증 로직
+# 로컬 환경(api_key.txt 존재 시) 또는 웹 배포 환경(st.secrets 존재 시) 모두를 완벽히 연동 및 대응합니다.
+HARDCODED_API_KEY = "" # 깃허브 보안 탐지를 피하기 위해 비워둡니다.
+
+# 1. 파일에서 읽기 시도 (로컬 바탕화면용)
+local_key_file = "api_key.txt"
+api_key = ""
+if os.path.exists(local_key_file):
+    try:
+        with open(local_key_file, "r", encoding="utf-8") as f:
+            api_key = f.read().strip()
+    except Exception:
+        pass
+
+# 2. 파일에 키가 없으면 Streamlit Secrets 비밀 금고에서 읽기 시도 (웹 배포 사이트용)
+if not api_key:
+    try:
+        # st.secrets 내부에 GEMINI_API_KEY 키값 존재 여부를 안전하게 검사합니다.
+        if "GEMINI_API_KEY" in st.secrets:
+            api_key = st.secrets["GEMINI_API_KEY"]
+    except Exception:
+        pass
+
+# 3. 마지막 수단: 직접 입력받기 (API 키가 어디에도 설정되지 않았을 경우에만 화면에 표시)
+if not api_key:
+    api_key = st.sidebar.text_input("🔑 구글 Gemini API 키를 입력하세요", type="password")
+    if api_key:
+        genai.configure(api_key=api_key)
         st.sidebar.success("✅ 구글 API 키 인증 완료!")
     else:
-        st.sidebar.warning("⚠️ 서비스를 이용하려면 왼쪽 사이드바에 구글 API 키를 등록하거나 입력해야 합니다.")
+        st.sidebar.warning("⚠️ 서비스를 이용하려면 구글 API 키를 설정해야 합니다.")
+else:
+    # API 키가 감지된 경우 입력창을 숨기고 자동으로 최우선 로그인 처리합니다.
+    genai.configure(api_key=api_key)
+    st.sidebar.success("🔑 구글 클라우드 API 자동 인증 완료!")
 
 st.sidebar.divider()
 
-# [사이드바 3순위] AI 엔진 모델 설정
+# [사이드바 4순위] AI 엔진 모델 설정
 st.sidebar.markdown("### 🤖 AI 엔진 모델 설정")
 model_option = st.sidebar.selectbox(
     "사용할 Gemini 모델을 선택하세요.",
@@ -112,7 +97,6 @@ model_option = st.sidebar.selectbox(
 
 st.sidebar.divider()
 
-# --- STREAMING_CHUNK: Managing accumulated university guidelines... ---
 # 누적식 대학교 입시요강/채점기준 관리 데이터베이스
 st.sidebar.markdown("### ⚙️ 대학별 입시요강 관리")
 
@@ -180,7 +164,6 @@ def find_korean_font():
                     return os.path.join(root, f)
     return None
 
-# --- STREAMING_CHUNK: Defining PDF Report Builder... ---
 # --- 5. PDF 보고서 작성 로직 (ReportLab 연동 - 2028 대입 정밀 10대 지표 지원 버전) ---
 def generate_pdf_report(result, student_filename, target_group):
     buffer = BytesIO()
@@ -359,7 +342,7 @@ def generate_pdf_report(result, student_filename, target_group):
         [Paragraph("", body_style), Paragraph("8. 특정 대상을 도운 구체적 나눔과 배려 (4점 만점)", body_style), Paragraph(f"<b>{result.get('score_sharing_4', '0.0')} / 4.0</b>", body_style)],
         [Paragraph("", body_style), Paragraph("9. 무단 지각/결석 배제 성실성 및 성품 행특 근거 (5점 만점)", body_style), Paragraph(f"<b>{result.get('score_sincerity_5', '0.0')} / 5.0</b>", body_style)],
         [Paragraph("", body_style), Paragraph("10. 과정 중심 조율 과정 입증 리더십 및 자발 주도성 (5점 만점)", body_style), Paragraph(f"<b>{result.get('score_leadership_5', '0.0')} / 5.0</b>", body_style)],
-        [Paragraph("<b>✨ 종합 합점수</b>", body_style), Paragraph("<b>모든 평가지표 합산 종합 환산점수 (보수적 사정관 컷)</b>", body_style), Paragraph(f"<b><font color='#EF4444'>{result.get('score_total', '0.0')} / 100</font></b>", body_style)]
+        [Paragraph("<b>✨ 합계 총점</b>", body_style), Paragraph("<b>모든 평가지표 합산 종합 환산점수 (보수적 사정관 컷)</b>", body_style), Paragraph(f"<b><font color='#EF4444'>{result.get('score_total', '0.0')} / 100</font></b>", body_style)]
     ]
     
     summary_table = Table(table_data, colWidths=[110, 270, 110])
@@ -367,9 +350,9 @@ def generate_pdf_report(result, student_filename, target_group):
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F3F4F6')),
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('SPAN', (0,1), (0,3)), 
-        ('SPAN', (0,4), (0,6)), 
-        ('SPAN', (0,7), (0,10)), 
+        ('SPAN', (0,1), (0,3)),
+        ('SPAN', (0,4), (0,6)),
+        ('SPAN', (0,7), (0,10)),
         ('BOTTOMPADDING', (0,0), (-1,-1), 3),
         ('TOPPADDING', (0,0), (-1,-1), 3),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')),
@@ -384,12 +367,12 @@ def generate_pdf_report(result, student_filename, target_group):
     audit_risk = audit_data.get("risk_level", "보통(안전)")
     audit_verdict = audit_data.get("audit_verdict", "AI 작성 의심 에피소드가 확인되지 않았습니다.")
     story.append(Paragraph(f"<b>AI 오염 위험도:</b> <font color='#7C3AED'>{audit_risk}</font> | <b>의심 영역:</b> {audit_data.get('suspected_areas', '없음')}", body_style))
+    story.append(Paragraph("<b>사정관 연합 감리 위원회 서평 및 신뢰도 검토 의견:</b>", audit_title_style))
     story.append(Paragraph(audit_verdict, audit_style))
     story.append(Spacer(1, 5))
     
     story.append(Paragraph("🔍 평가 지표별 세부 분석 및 냉철한 쓴소리 솔루션", h1_style))
     
-    # 1. 학업성취/태도/디지털
     story.append(Paragraph("<b>[학업 역량 및 디지털 탐구 정성 진단 (배점: 40점)]</b>", body_style))
     story.append(Paragraph(f"성취도/태도 진단: {result.get('reason_academic_core', '분석 누락')}", body_style))
     if result.get('evidence_academic_core'):
@@ -400,7 +383,6 @@ def generate_pdf_report(result, student_filename, target_group):
         story.append(Paragraph(result['improvement_academic_core'], feedback_style))
     story.append(Spacer(1, 3))
     
-    # 2. 전공성취/진로
     story.append(Paragraph("<b>[진로 역량 및 전공교과 위계성 진단 (배점: 40점)]</b>", body_style))
     story.append(Paragraph(f"진로/교과 설계 진단: {result.get('reason_career_core', '분석 누락')}", body_style))
     if result.get('evidence_career_core'):
@@ -411,7 +393,6 @@ def generate_pdf_report(result, student_filename, target_group):
         story.append(Paragraph(result['improvement_career_core'], feedback_style))
     story.append(Spacer(1, 3))
 
-    # 3. 공동체
     story.append(Paragraph("<b>[공동체 역량 및 자발적 리더십 진단 (배점: 20점)]</b>", body_style))
     story.append(Paragraph(f"공동체성/리더십 진단: {result.get('reason_social_core', '분석 누락')}", body_style))
     if result.get('evidence_social_core'):
@@ -468,7 +449,6 @@ def load_local_file_text(filename):
             with open(path, "r", encoding="cp949") as f:
                 return f.read()
 
-# --- STREAMING_CHUNK: Drawing Main Application Page Layout... ---
 # --- 7. 메인 화면 구성 ---
 st.markdown('<h1 style="color: #1E3A8A;">브니엘고등학교 2028학년도 AI 생기부 정밀 채점 시스템</h1>', unsafe_allow_html=True)
 
@@ -489,13 +469,11 @@ elif api_key and not student_file:
 elif api_key and student_file:
     st.success(f"📎 생기부 파일 로드 완료: {student_file.name}")
     
-    # 가이드라인 반영 알림 표시
     if selected_criteria_files:
         st.info(f"🎯 이번 채점에는 {target_university_group} 모델과 보관함에서 선택한 **{len(selected_criteria_files)}개 대학 입시요강**이 융합 적용됩니다.\n\n적용 서류: {', '.join(selected_criteria_files)}")
     else:
         st.warning(f"⚠️ 선택된 대학별 입시요강이 없습니다. 기본 **[{target_university_group}]** 표준 서류평가 지표로 채점을 진행합니다.")
 
-    # 원클릭 채점 버튼
     if st.button("🔥 AI 실시간 채점 시작하기", type="primary", use_container_width=True):
         
         with st.spinner(f"🧠 AI 사정관이 2028 대입 연합 기준(블룸 6단계 판별식 및 AI 오염 감리 포함)으로 차가운 서류 검증 중... (약 10~25초 소요)"):
@@ -514,7 +492,6 @@ elif api_key and student_file:
             else:
                 criteria_text = "선택된 대학교 그룹의 학생부종합전형 인재상 및 공통 서류 평가 요소를 적용하여 엄격히 평가할 것."
 
-            # AI 명령어 조립 (2028 대입 연합 평가 기준 반영)
             prompt = f"""
             당신은 대학 입학 사정관 연합회(5개교 공동 연구 기준)의 가장 집요하고 보수적인 수석 입학사정관이자, 학생이 방심하지 않도록 뼈를 때리는 냉철한 쓴소리 피드백을 내리는 브니엘고등학교의 진학 교사입니다.
             제공된 [학생 생기부 텍스트]를 완벽히 독해하고, 아래에 명시된 [2028학년도 인서울 표준 범용 입학사정관 평가기준 체크리스트 (100점 만점)]을 기본 장착하여 등급과 소수점 스코어를 정밀 산출하세요.
@@ -523,42 +500,29 @@ elif api_key and student_file:
             [2028학년도 인서울 표준 범용 입학사정관 평가기준 체크리스트 및 감점 규칙]
             
             I. 학업역량 (총 40점)
-            1. 성취도 분포 및 이수 환경의 상대적 우위성 (15점 만점):
-               - 단순 내신등급(GPA)이 아닌, 수강인원, 원점수, 과목평균, 성취도 분포를 보고 이 학생이 동일 전형 지원자 풀 내에서 거둔 실질적인 등급 우위를 측정한다.
-               - 수강인원이 적은 심화 전문교과에서의 평균 대비 격차 우수성을 판단하고, 고학년(일반->진로->전문)으로 올라가며 성취도가 유지/상승되는 상승곡선(Trajectory)에 가점을 준다.
-            2. 행동 동기 및 어려움 극복 서사 기반 학업태도 (10점 만점):
-               - 교사가 실제 관찰한 구체적인 행동 근거(자료탐색 방식, 지적 호기심 등)가 학생부에 명시되어 있는지 평가한다.
-               - 단순히 "성실히 참여함" 식의 결과 나열어만 있고 과정이 누락되면 가혹히 감점하며, 어려움을 직접 극복한 주도적 에피소드가 명확히 확인되어야 고득점(A~S).
-            3. 디지털 리터러시 및 비판적 미디어 탐구 역량 (15점 만점):
-               - 생성형 AI, 공공데이터, 통계 등 디지털 도구를 활용하되, 이를 무작동 인용하지 않고 "할루시네이션(오류), 편향, 편파적 자료의 한계를 인지해 스스로 대안을 제시한 서술"이 있음.
+            1. 성취도 분포 및 이수 환경의 상대적 우위성 (15점 만점)
+            2. 행동 동기 및 어려움 극복 서사 기반 학업태도 (10점 만점)
+            3. 디지털 리터러시 및 비판적 미디어 탐구 역량 (15점 만점)
             
             II. 진로역량 (40점)
-            4. 전공 연계 교과의 위계적 이수 노력 및 동기 (10점 만점):
-               - 진로와 연결된 과목이 난이도 순으로 2단계 이상 위계적으로 잘 설계되어 이수했는가.
-            5. 전공 관련 주요 교과 성취도 차별성 및 전공적 사고 (10점 만점):
-               - 전공 관련 이수 과목 성취도가 타 과목 대비 차별화되어 우수하고, 전공 분야 특유의 다각적 분석 사고를 보여주는 구체적 기술이 있는가.
-            6. 교과-창체 연계 진로 에피소드 및 비판적 독해 (20점 만점):
-               - 단순 나열이 아닌 정규수업/동아리에서 발생한 '의문'이 탐구로 직접 확장된 에피소드(8점), 특정 학술도서/자료를 인용해 검토한 비판적 독해(6점), 그리고 자율/동아리/진로 에피소드가 하나의 성장스토리로 이어지는 일관성(6점)을 엄정히 평가한다.
+            4. 전공 연계 교과의 위계적 이수 노력 및 동기 (10점 만점)
+            5. 전공 관련 주요 교과 성취도 차별성 및 전공적 사고 (10점 만점)
+            6. 교과-창체 연계 진로 에피소드 및 비판적 독해 (20점 만점)
 
             III. 공동체역량 (총 20점)
             7. 다원적 환경에서의 실질적 협업 및 소통 역량 (6점 만점)
             8. 특정 대상을 도운 구체적 나눔과 배려 (4점 만점)
-            9. 무단 지각/결석 배제 성실성 및 성품 행특 근거 (5점 만점)
+            9. 성실성과 규칙 준수 (5점 만점)
             10. 과정 중심 조율 과정 입증 리더십 및 자발 주도성 (5점 만점)
             
             =========================================
             [★ 초정밀 AI 감리 규칙 및 블룸 인지 수준 6단계 필터 ★]
             
             1. 블룸(Bloom) 인지 수준 판별식:
-               - 학생부의 동사, 서술어, 목적어 조합을 즉시 스캔한다.
-               - 1-2단계(지식/이해: "개념을 조사함", "특징을 정리하여 발표함", "내용을 요약하고 설명함") 중심의 평이한 기재는 냉정하게 중위권 혹은 감점 등급으로 고정 분류한다.
-               - 3-4단계(적용/분석: "개념을 다른 사회 현상에 투영하여 해석함", "데이터를 통해 대조/분류함")는 중상위권.
-               - 5-6단계(평가/창안: "오류나 편향성을 교차 검증하고 한계를 입증함", "새로운 조건/모델을 설계하고 제안함")가 입증되어야 비로소 영역별 만점(S등급)을 부여한다.
-               
+               - 지식/이해 단계 중심의 평이한 기재는 냉정하게 중위권 혹은 감점 등급으로 고정 분류한다.
+               - 평가/창안 단계가 입증되어야 비로소 영역별 만점(S등급)을 부여한다.
             2. AI 오염 및 신뢰도 검사 (부록 B 가이드):
-               - "표준 AI 템플릿 의심": 학생의 주도적인 시행착오나 실패 과정 없이, 지나치게 화려한 거대 담론을 매끄러운 맥락으로만 나열한 세특을 감지한다.
-               - "과목 간 문체 이질성": 특정 과목에서만 대학원 수준의 영어 학술어휘가 등장하는 등의 이질적 불일치를 감지한다.
-               - "교사 관찰 부재": 학생의 산출물 내용만 요약해 붙여넣고 정작 '교사가 교실에서 관찰한 정황'이 누락된 세특을 잡아낸다.
+               - "표준 AI 템플릿 의심", "과목 간 문체 이질성", "교사 관찰 부재" 항목 탐색.
             
             =========================================
             [채점 기준 가이드라인 (누적 대학교 가이드라인)]
@@ -602,11 +566,9 @@ elif api_key and student_file:
             """
 
             try:
-                # 선택된 Gemini 모델 호출
                 model = genai.GenerativeModel(model_option)
                 response = model.generate_content(prompt)
                 
-                # AI 답변 정제 및 파싱
                 response_text = response.text.strip()
                 if response_text.startswith("```json"):
                     response_text = response_text[7:]
@@ -622,14 +584,12 @@ elif api_key and student_file:
                 st.divider()
                 st.markdown(f"### 📝 2단계: 실제 AI 채점 결과 ({target_university_group} 전형형 모델 - 🚨 냉정 평가 및 AI 감리 모드)")
                 
-                # 대시보드 스코어 요약
                 col_score1, col_score2, col_score3, col_score4 = st.columns(4)
                 col_score1.metric("📊 학업역량 계 (40점 만점)", f"{float(result['score_achievement_15'].split('/')[0]) + float(result['score_academic_attitude_10'].split('/')[0]) + float(result['score_digital_literacy_15'].split('/')[0]):.1f} / 40.0")
                 col_score2.metric("🎯 진로역량 계 (40점 만점)", f"{float(result['score_major_selection_10'].split('/')[0]) + float(result['score_major_grades_10'].split('/')[0]) + float(result['score_career_experience_20'].split('/')[0]):.1f} / 40.0")
                 col_score3.metric("🤝 공동체역량 계 (20점 만점)", f"{float(result['score_collab_6'].split('/')[0]) + float(result['score_sharing_4'].split('/')[0]) + float(result['score_sincerity_5'].split('/')[0]) + float(result['score_leadership_5'].split('/')[0]):.1f} / 20.0")
                 col_score4.metric("🚨 종합 환산 점수", f"{result['score_total']} / 100")
 
-                # --- 🤖 2028학년도 전용 AI 대필/오염도 신뢰도 진단 결과 화면 노출 ---
                 st.divider()
                 st.markdown("### 🤖 2028학년도 표준 생기부 AI 신뢰도 감리 결과 (AI Audit)")
                 audit_box = result.get("ai_pollution_audit", {})
@@ -648,11 +608,9 @@ elif api_key and student_file:
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # 아코디언 세부 분석 및 원문 노출 구현 (탭 가변형 개편)
                 st.divider()
                 st.markdown("### 🔍 10대 지표 상세 평가 분석서")
                 
-                # 1. 학업역량 3대 지표 아코디언
                 with st.expander("📕 I. 학업역량 (성취도 분포, 학업태도, 디지털 리터러시) [배점: 40점]"):
                     tab_analysis, tab_improve = st.tabs(["🔍 세부 평가 의견 (블룸 6단계 대조)", "🚨 만점 대비 감점 원인 및 쓴소리 조언"])
                     with tab_analysis:
@@ -664,7 +622,6 @@ elif api_key and student_file:
                     with tab_improve:
                         st.warning(result.get("improvement_academic_core", "학업 역량이 완벽합니다."))
                         
-                # 2. 진로역량 3대 지표 아코디언
                 with st.expander("📗 II. 진로역량 (과목 위계성, 전공적 사고, 교과-창체 연계) [배점: 40점]"):
                     tab_analysis, tab_improve = st.tabs(["🔍 세부 평가 의견 (독해력 및 선택과목 위계 대조)", "🚨 만점 대비 감점 원인 및 초정밀 탐구 추천 소주제"])
                     with tab_analysis:
@@ -676,7 +633,6 @@ elif api_key and student_file:
                     with tab_improve:
                         st.warning(result.get("improvement_career_core", "진로 설계가 완벽합니다."))
                         
-                # 3. 공동체역량 4대 지표 아코디언
                 with st.expander("📘 III. 공동체역량 (다원적 협업, 나눔과 배려, 성실성, 리더십) [배점: 20점]"):
                     tab_analysis, tab_improve = st.tabs(["🔍 세부 평가 의견 (성품 및 실질 기여도 대조)", "🚨 만점 대비 감점 원인 및 행동 지침"])
                     with tab_analysis:
@@ -689,7 +645,6 @@ elif api_key and student_file:
                     with tab_improve:
                         st.warning(result.get("improvement_social_core", "인성 지표가 완벽합니다."))
                         
-                # 파일 다운로드 기능 연동
                 st.divider()
                 st.markdown("### 📥 3단계: 채점 보고서 다운로드")
                 
