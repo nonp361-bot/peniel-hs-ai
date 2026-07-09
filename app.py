@@ -252,6 +252,17 @@ def generate_pdf_report(result, student_filename, target_group):
         keepWithNext=True
     )
 
+    # [수정 사항] 누락되었던 footer_style 정의 부분을 안전하게 추가 복원했습니다.
+    footer_style = ParagraphStyle(
+        'Footer',
+        parent=styles['Normal'],
+        fontName=font_name,
+        fontSize=7,
+        leading=9,
+        textColor=colors.HexColor('#9CA3AF'),
+        alignment=1
+    )
+
     # [테두리 겹침 철저 배제] 테이블 래핑 방식으로 Callout 박스를 렌더링하는 헬퍼 함수 정의
     # 가로 총 너비: 515포인트 (A4 여백 보정 적용)
     def create_callout_box(text, bg_color_hex, border_color_hex, text_color_hex, font_size=8, leading=12):
@@ -282,7 +293,6 @@ def generate_pdf_report(result, student_filename, target_group):
     
     story.append(Paragraph("📊 2028학년도 개정 핵심 10대 지표별 스코어 카드", h1_style))
     
-    # 가로 총 너비 515포인트 규격과 완벽하게 매칭되는 120 + 275 + 120 그리드 테이블 설계
     table_data = [
         [Paragraph("<b>평가 역량 대분류</b>", body_style), Paragraph("<b>세부 정밀 평가 지표 (100점 만점 기준)</b>", body_style), Paragraph("<b>취득 점수 (소수점 정밀계산)</b>", body_style)],
         [Paragraph("<b>I. 학업역량 (40점)</b>", body_style), Paragraph("1. 성취도 분포 및 이수 환경의 상대적 우위성 (15점 만점)", body_style), Paragraph(f"<b>{result.get('score_achievement_15', '0.0')}</b>", body_style)],
@@ -502,7 +512,7 @@ elif api_key and student_file:
                 "score_career_experience_20": "진로탐색 에피소드 점수 (예: 13.5 / 20)",
                 "reason_career_core": "진로역량 3개 영역에 대한 보수적이고 냉혹한 통합 사정관 진단 서평 (위계성 및 알맹이 나열 한계 폭로)",
                 "evidence_career_core": "진로역량에서 과장되었거나 알맹이가 누락된 실제 문장 그대로 인용",
-                "improvement_career_core": "이 학생의 희망 진로에 최적화된, 실제 대학 학술논문과 전공 서적을 연계한 '독창적이고 구체적인 꼬리물기 심화 탐구 소주제 2~3개 직접 기획 추천'",
+                "improvement_career_core": "이 학생의 희망 진로에 최적화된, 실제 대학 학술논문และ 전공 서적을 연계한 '독창적이고 구체적인 꼬리물기 심화 탐구 소주제 2~3개 직접 기획 추천'",
                 
                 "score_collab_6": "협업/소통 점수 (예: 4.0 / 6)",
                 "score_sharing_4": "나눔/배려 점수 (예: 2.5 / 4)",
