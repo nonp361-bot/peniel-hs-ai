@@ -25,13 +25,13 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- 2. 로컬 채점 기준 보관 폴더 (영구 저장 - 요구사항 6, 7) ---
+# --- 2. 로컬 채점 기준 보관 폴더 (영구 저장) ---
 CRITERIA_DB_DIR = "criteria_database"
 os.makedirs(CRITERIA_DB_DIR, exist_ok=True)
 
 # --- 3. 헬퍼 함수 ---
 def extract_text_from_pdf_stream(pdf_file):
-    """RAM(메모리) 상에서 직접 PDF 텍스트 추출 - 개인정보 휘발성 처리 (요구사항 2)"""
+    """RAM(메모리) 상에서 직접 PDF 텍스트 추출 - 개인정보 휘발성 처리"""
     if pdf_file is None:
         return ""
     try:
@@ -110,7 +110,7 @@ evaluator_mode = st.sidebar.radio(
 
 st.sidebar.divider()
 
-# 4-2. 피드백 버전 선택 (요구사항 9 - 미선택 상태 기본 지정)
+# 4-2. 피드백 버전 선택 (요구사항 9 - 초기 진입 시 미선택 상태 고정)
 st.sidebar.markdown("### 📝 2. 평가 및 피드백 버전 선택")
 feedback_category = st.sidebar.selectbox(
     "피드백 대분류를 선택하세요 (필수)",
@@ -220,7 +220,7 @@ st.markdown("### 📋 AI 실시간 통합 채점 기준표 (메인 상시 노출
 
 # 📌 [경로 A] 피드백 영역 미선택 시
 if "선택" in selected_feedback_type or selected_feedback_type == "미선택":
-    st.warning("👈 **왼쪽 사이드바의 [2. 평가 및 피드백 버전 선택]에서 원하시는 피드백 대분류 및 세부 평가 영역을 선택해 주세요.**")
+    st.warning("👈 **왼쪽 사이드바의 [2. 평가 및 피드백 버전 선택]에서 피드백 대분류와 세부 평가 영역을 먼저 선택해 주세요.**")
 
 # 📌 [경로 B] 과목 세부능력 특기사항 전용 피드백 선택 시 7대 교사 점검 항목 표 노출
 elif selected_feedback_type == "과목세부능력 특기사항 전용 피드백":
