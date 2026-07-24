@@ -25,7 +25,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- 2. 채점 기준 보관 폴더 (영구 저장 - 요구사항 6, 7) ---
+# --- 2. 로컬 채점 기준 보관 폴더 (영구 저장 - 요구사항 6, 7) ---
 CRITERIA_DB_DIR = "criteria_database"
 os.makedirs(CRITERIA_DB_DIR, exist_ok=True)
 
@@ -109,26 +109,34 @@ evaluator_mode = st.sidebar.radio(
 
 st.sidebar.divider()
 
-# 4-2. 피드백 버전 선택 (요구사항 9)
+# 4-2. 피드백 버전 선택 (요구사항 9 - 미선택 상태를 기본으로 두어 과세특 자동지정 방지)
 st.sidebar.markdown("### 📝 2. 평가 및 피드백 버전 선택")
 feedback_category = st.sidebar.selectbox(
-    "피드백 대분류 선택",
-    ["교사전용 피드백 버전", "학생용 피드백 버전"]
+    "피드백 대분류를 선택하세요 (필수)",
+    [
+        "선택해주세요 (피드백 대분류 미선택)",
+        "교사전용 피드백 버전",
+        "학생용 피드백 버전"
+    ],
+    index=0  # 초기 진입 시 미선택 상태
 )
+
+selected_feedback_type = "선택해주세요 (피드백 미선택)"
 
 if feedback_category == "교사전용 피드백 버전":
     selected_feedback_type = st.sidebar.radio(
         "세부 평가 영역 선택 (필수)",
         [
+            "선택해주세요 (세부 평가 영역 미선택)",
             "과목세부능력 특기사항 전용 피드백",
             "동아리 특기사항 전용 피드백",
             "자율 및 진로 특기사항 전용 피드백",
             "행동발달특기사항 전용 피드백",
             "생기부 종합 전용 피드백"
         ],
-        index=0
+        index=0  # 초기 진입 시 미선택 상태
     )
-else:
+elif feedback_category == "학생용 피드백 버전":
     selected_feedback_type = "학생전용 피드백"
     st.sidebar.info("🎓 학생 1인에 대한 냉정한 현위치 진단, 강점/약점 분석 및 앞으로의 탐구 솔루션을 제공합니다.")
 
@@ -198,15 +206,20 @@ if accumulated_files:
                 os.remove(os.path.join(CRITERIA_DB_DIR, file_name))
         st.rerun()
 
-# --- 5. 메인 화면 헤더 및 실시간 채점 기준표 노출 (API 연동 없이 0.001초 렌더링) ---
+# --- 5. 메인 화면 헤더 및 실시간 채점 기준표 노출 ---
 st.title("🏫 브니엘고등학교 AI 생기부 정밀 평가 시스템")
 
-st.markdown(f"**현재 관점:** `{evaluator_mode}` | **선택된 피드백 모드:** `<font color='#1E3A8A'><b>{selected_feedback_type}</b></font>` | **적용 기준 파일:** `{len(selected_criteria_files)}개`", unsafe_allow_html=True)
+display_mode_str = selected_feedback_type if "미선택" not in selected_feedback_type else "영역 미선택 (좌측 사이드바에서 선택)"
+st.markdown(f"**현재 관점:** `{evaluator_mode}` | **선택된 피드백 모드:** `<font color='#1E3A8A'><b>{display_mode_str}</b></font>` | **적용 기준 파일:** `{len(selected_criteria_files)}개`", unsafe_allow_html=True)
 
 st.markdown("### 📋 AI 실시간 통합 채점 기준표 (메인 상시 노출)")
 
-# 📌 [경로 1] 과목 세부능력 특기사항 전용 피드백 선택 시 무조건 7대 점검 항목 표 노출
-if selected_feedback_type == "과목세부능력 특기사항 전용 피드백":
+# 📌 [경로 A] 피드백 영역을 선택하지 않았을 때
+if "미선택" in selected_feedback_type:
+    st.warning("👈 **왼쪽 사이드바의 [2. 평가 및 피드백 버전 선택]에서 원하시는 피드백 버전과 세부 평가 영역을 선택해 주세요.**")
+
+# 📌 [경로 B] 과목 세부능력 특기사항 전용 피드백 선택 시 7대 교사 점검 항목 표 노출
+elif selected_feedback_type == "과목세부능력 특기사항 전용 피드백":
     st.info("💡 **과목 세부능력 특기사항 교사 자가점검 7대 핵심 채점기준표 (100점 만점)**")
     st.markdown("""
     <div style="background-color: #F8FAFC; border: 1.5px solid #CBD5E1; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
@@ -267,7 +280,7 @@ if selected_feedback_type == "과목세부능력 특기사항 전용 피드백":
     </div>
     """, unsafe_allow_html=True)
 
-# 📌 [경로 2] 기타 생기부 영역 및 학생용 탭 선택 시 삼분 배점 기준표 표출 (요구사항 8)
+# 📌 [경로 C] 기타 생기부 영역 및 학생용 탭 선택 시 삼분 배점 기준표 표출 (요구사항 8)
 else:
     col_c1, col_c2, col_c3 = st.columns(3)
     with col_c1:
@@ -325,7 +338,7 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
     story.append(Paragraph(f"대상 파일: {student_filename}  |  평가 모드: {fb_type}", subtitle_style))
     story.append(Spacer(1, 4))
     
-    # 1) 과목 세특 교사 점검 리포트
+    # 과목 세특 교사 점검 리포트
     if fb_type == "과목세부능력 특기사항 전용 피드백" and "setuk_eval" in eval_data:
         st_data = eval_data["setuk_eval"]
         t_scores = st_data.get("scores", {})
@@ -357,7 +370,7 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
         story.append(Spacer(1, 4))
         story.append(create_box(f"<b>✏️ 수정·보완 추천 문장 가이드:</b><br/>{st_data.get('revision_examples', '')}", '#FEF2F2', '#EF4444', '#991B1B'))
 
-    # 2) 표준 생기부 리포트
+    # 표준 생기부 리포트
     else:
         scores = eval_data.get("scores", {})
         table_data = [
@@ -410,140 +423,143 @@ student_file = st.file_uploader("학생부 PDF 업로드", type=["pdf"], key="st
 if student_file and api_key:
     st.success(f"📎 학생부 파일 로드 완료: {student_file.name}")
     
-    if st.button("🔥 선택한 버전으로 AI 정밀 평가 시작하기", type="primary", use_container_width=True):
-        with st.spinner(f"🧠 AI 사정관이 [{evaluator_mode}] 관점에서 [{selected_feedback_type}] 맞춤 정밀 검증을 진행 중입니다..."):
-            
-            # RAM 상에서 읽기 (개인정보 휘발성)
-            student_text = extract_text_from_pdf_stream(student_file)
-            
-            if not student_text.strip():
-                st.error("❌ PDF에서 텍스트를 추출하지 못했습니다. 빈 문서이거나 이미지 스캔본인지 확인하세요.")
-                st.stop()
+    if "미선택" in selected_feedback_type:
+        st.warning("⚠️ 왼쪽 사이드바에서 [피드백 대분류 및 세부 평가 영역]을 먼저 선택해야 AI 평가를 시작할 수 있습니다.")
+    else:
+        if st.button("🔥 선택한 버전으로 AI 정밀 평가 시작하기", type="primary", use_container_width=True):
+            with st.spinner(f"🧠 AI 사정관이 [{evaluator_mode}] 관점에서 [{selected_feedback_type}] 맞춤 정밀 검증을 진행 중입니다..."):
                 
-            criteria_full_text = ""
-            for fname in selected_criteria_files:
-                criteria_full_text += f"\n--- [{fname}] ---\n" + load_local_file_text(fname)[:1500]
-            
-            if not criteria_full_text:
-                criteria_full_text = "2028학년도 대입 표준 학종 평가 지표 적용"
+                # RAM 상에서 읽기 (개인정보 휘발성)
+                student_text = extract_text_from_pdf_stream(student_file)
+                
+                if not student_text.strip():
+                    st.error("❌ PDF에서 텍스트를 추출하지 못했습니다. 빈 문서이거나 이미지 스캔본인지 확인하세요.")
+                    st.stop()
+                    
+                criteria_full_text = ""
+                for fname in selected_criteria_files:
+                    criteria_full_text += f"\n--- [{fname}] ---\n" + load_local_file_text(fname)[:1500]
+                
+                if not criteria_full_text:
+                    criteria_full_text = "2028학년도 대입 표준 학종 평가 지표 적용"
 
-            # [분기 1] 과목 세부능력 특기사항 전용 피드백
-            if selected_feedback_type == "과목세부능력 특기사항 전용 피드백":
-                prompt = f"""
-                당신은 대학 입학사정관이자 교과세특 작성 컨설팅 전문가입니다.
-                제공된 [과목세특 텍스트]는 수강학생들(1명~20명 이상)의 세특 기재 모음입니다.
-                교사가 자신이 작성한 과세특 기재 내용을 스스로 점검하고 개선할 수 있도록 아래 7가지 채점기준(100점 만점)에 맞춰 정밀 평가하세요.
+                # [분기 1] 과목 세부능력 특기사항 전용 피드백
+                if selected_feedback_type == "과목세부능력 특기사항 전용 피드백":
+                    prompt = f"""
+                    당신은 대학 입학사정관이자 교과세특 작성 컨설팅 전문가입니다.
+                    제공된 [과목세특 텍스트]는 수강학생들(1명~20명 이상)의 세특 기재 모음입니다.
+                    교사가 자신이 작성한 과세특 기재 내용을 스스로 점검하고 개선할 수 있도록 아래 7가지 채점기준(100점 만점)에 맞춰 정밀 평가하세요.
 
-                [과세특 교사 점검 채점기준 (100점 만점)]:
-                1. 학생의 교과적 역량을 잘 보여주는 기록인가 (20점 만점)
-                2. 교사의 관찰이 들어간 기록인가 (20점 만점)
-                3. 교과의 역량이 들어갔는가 (20점 만점)
-                4. 학생 간 복붙한 기록이 없는가 (10점 만점)
-                5. AI를 너무 돌려 맥락에 맞지 않는 단어나 문장이 들어가지 않았는가 (10점 만점)
-                6. 가독성이 높은가 (10점 만점)
-                7. 생기부 기재 금지 사항(대학명, 기관명, 상호명, 강사명 등)이 잘 반영되었는가 (10점 만점)
+                    [과세특 교사 점검 채점기준 (100점 만점)]:
+                    1. 학생의 교과적 역량을 잘 보여주는 기록인가 (20점 만점)
+                    2. 교사의 관찰이 들어간 기록인가 (20점 만점)
+                    3. 교과의 역량이 들어갔는가 (20점 만점)
+                    4. 학생 간 복붙한 기록이 없는가 (10점 만점)
+                    5. AI를 너무 돌려 맥락에 맞지 않는 단어나 문장이 들어가지 않았는가 (10점 만점)
+                    6. 가독성이 높은가 (10점 만점)
+                    7. 생기부 기재 금지 사항(대학명, 기관명, 상호명, 강사명 등)이 잘 반영되었는가 (10점 만점)
 
-                [업로드된 과목세특 모음 텍스트]:
-                {student_text[:7000]}
+                    [업로드된 과목세특 모음 텍스트]:
+                    {student_text[:7000]}
 
-                반드시 아래 지정된 순수 JSON 형식으로만 응답하세요 (마크다운 ```json 기호 절대 금지):
-                {{
-                    "setuk_eval": {{
+                    반드시 아래 지정된 순수 JSON 형식으로만 응답하세요 (마크다운 ```json 기호 절대 금지):
+                    {{
+                        "setuk_eval": {{
+                            "scores": {{
+                                "academic_competence": 17,
+                                "teacher_observation": 16,
+                                "subject_competence": 18,
+                                "duplication": 9,
+                                "ai_overuse": 8,
+                                "readability": 8,
+                                "prohibited_items": 10,
+                                "total": 86
+                            }},
+                            "overall_summary": "전체 수강생 과세특에 대한 입학사정관/교사 점검 관점의 종합 평어",
+                            "good_points": "학생들의 차별화된 교과 역량 및 관찰 사실이 돋보이는 우수 기재 사례 및 장점 분석",
+                            "improvements": "학생 간 유사 표현, AI 템플릿 의심 문장, 추상적 평가어 나열 등 구체적 감점 및 보완점 사유",
+                            "revision_examples": "실제 제출된 과세특 문장 중 진부하거나 AI 오염이 의심되는 문장을 2~3개 꼽고, 이를 교사의 직접 관찰 및 교과 역량 중심으로 어떻게 수정하면 좋을지 '수정 전 ➔ 수정 후' 예시문 작성"
+                        }}
+                    }}
+                    """
+
+                # [분기 2] 교사 전용 (동아리, 자율/진로, 행특, 종합) 피드백
+                elif feedback_category == "교사전용 피드백 버전":
+                    prompt = f"""
+                    당신은 전국 대학부종합전형 서류를 평가하는 [{evaluator_mode}]입니다.
+                    제공된 [학생 생기부 텍스트]를 독해하고, 선택된 피드백 버전인 [{selected_feedback_type}]에 집중하여 정밀 평가와 피드백을 작성하세요.
+
+                    [핵심 평가 지침]:
+                    1. 평가자 관점: '{evaluator_mode}' 특성 반영.
+                    2. 학업(40점)/진로(40점)/공동체(20점) 총 100점 만점으로 점수를 매기세요.
+                    3. 선택된 피드백 영역('{selected_feedback_type}')에 집중하여 교사 관점의 장점, 보완점/감점 사유, 세특 원문 인용을 구체적으로 적으세요.
+
+                    [학생 제출 텍스트]:
+                    {student_text[:7000]}
+
+                    반드시 아래 지정된 순수 JSON 형식으로만 응답하세요 (마크다운 ```json 기호 절대 금지):
+                    {{
                         "scores": {{
-                            "academic_competence": 17,
-                            "teacher_observation": 16,
-                            "subject_competence": 18,
-                            "duplication": 9,
-                            "ai_overuse": 8,
-                            "readability": 8,
-                            "prohibited_items": 10,
-                            "total": 86
+                            "academic": 33.0,
+                            "career": 32.5,
+                            "community": 16.5,
+                            "total": 82.0
                         }},
-                        "overall_summary": "전체 수강생 과세특에 대한 입학사정관/교사 점검 관점의 종합 평어",
-                        "good_points": "학생들의 차별화된 교과 역량 및 관찰 사실이 돋보이는 우수 기재 사례 및 장점 분석",
-                        "improvements": "학생 간 유사 표현, AI 템플릿 의심 문장, 추상적 평가어 나열 등 구체적 감점 및 보완점 사유",
-                        "revision_examples": "실제 제출된 과세특 문장 중 진부하거나 AI 오염이 의심되는 문장을 2~3개 꼽고, 이를 교사의 직접 관찰 및 교과 역량 중심으로 어떻게 수정하면 좋을지 '수정 전 ➔ 수정 후' 예시문 작성"
+                        "teacher_feedback": {{
+                            "category": "{selected_feedback_type}",
+                            "strength": "{selected_feedback_type} 관점에서의 탁월한 장점 상세 서술",
+                            "weakness": "{selected_feedback_type} 관점에서의 보완점, 감점 사유, Bloom 단계 한계 및 AI 의심문장 지적",
+                            "quote": "텍스트에서 실제 인용한 핵심 문장"
+                        }}
                     }}
-                }}
-                """
+                    """
 
-            # [분기 2] 교사 전용 (동아리, 자율/진로, 행특, 종합) 피드백 (요구사항 3, 4, 9)
-            elif feedback_category == "교사전용 피드백 버전":
-                prompt = f"""
-                당신은 전국 대학부종합전형 서류를 평가하는 [{evaluator_mode}]입니다.
-                제공된 [학생 생기부 텍스트]를 독해하고, 선택된 피드백 버전인 [{selected_feedback_type}]에 집중하여 정밀 평가와 피드백을 작성하세요.
+                # [분기 3] 학생 전용 피드백
+                else:
+                    prompt = f"""
+                    당신은 전국 대학부종합전형 서류를 평가하는 [{evaluator_mode}]입니다.
+                    제공된 [학생 생기부 텍스트]를 독해하고 학생 전용 피드백 리포트를 작성하세요.
 
-                [핵심 평가 지침]:
-                1. 평가자 관점: '{evaluator_mode}' 특성 반영.
-                2. 학업(40점)/진로(40점)/공동체(20점) 총 100점 만점으로 점수를 매기세요.
-                3. 선택된 피드백 영역('{selected_feedback_type}')에 집중하여 교사 관점의 장점, 보완점/감점 사유, 세특 원문 인용을 구체적으로 적으세요.
+                    [핵심 평가 지침]:
+                    1. 평가자 관점: '{evaluator_mode}' 특성 반영.
+                    2. 학업(40점)/진로(40점)/공동체(20점) 총 100점 만점으로 점수를 산출하세요.
+                    3. 학생용 피드백: 헛된 희망을 주지 않는 입학사정관 관점의 냉정한 현재 위치 진단(지원 가능 대학 라인), 여태까지 했던 활동의 강점과 치명적 약점, 앞으로 3학년 및 다음 학기에 실행해야 할 구체적인 탐구 주제 및 활동 솔루션을 제시하세요.
 
-                [학생 제출 텍스트]:
-                {student_text[:7000]}
+                    [학생 제출 텍스트]:
+                    {student_text[:7000]}
 
-                반드시 아래 지정된 순수 JSON 형식으로만 응답하세요 (마크다운 ```json 기호 절대 금지):
-                {{
-                    "scores": {{
-                        "academic": 33.0,
-                        "career": 32.5,
-                        "community": 16.5,
-                        "total": 82.0
-                    }},
-                    "teacher_feedback": {{
-                        "category": "{selected_feedback_type}",
-                        "strength": "{selected_feedback_type} 관점에서의 탁월한 장점 상세 서술",
-                        "weakness": "{selected_feedback_type} 관점에서의 보완점, 감점 사유, Bloom 단계 한계 및 AI 의심문장 지적",
-                        "quote": "텍스트에서 실제 인용한 핵심 문장"
+                    반드시 아래 지정된 순수 JSON 형식으로만 응답하세요 (마크다운 ```json 기호 절대 금지):
+                    {{
+                        "scores": {{
+                            "academic": 33.0,
+                            "career": 32.5,
+                            "community": 16.5,
+                            "total": 82.0
+                        }},
+                        "student_feedback": {{
+                            "current_position": "입학사정관 관점 냉정한 현위치 진단 및 지원 가능 대학 라인",
+                            "strength_analysis": "여태까지 한 활동의 핵심 강점 분석",
+                            "weakness_analysis": "치명적인 약점 및 감점 요소 분석",
+                            "recommendation": "앞으로 3학년 및 다음 학기에 실행해야 할 구체적인 탐구 주제 및 과목 선택/활동 솔루션"
+                        }}
                     }}
-                }}
-                """
+                    """
 
-            # [분기 3] 학생 전용 피드백 (요구사항 9)
-            else:
-                prompt = f"""
-                당신은 전국 대학부종합전형 서류를 평가하는 [{evaluator_mode}]입니다.
-                제공된 [학생 생기부 텍스트]를 독해하고 학생 전용 피드백 리포트를 작성하세요.
-
-                [핵심 평가 지침]:
-                1. 평가자 관점: '{evaluator_mode}' 특성 반영.
-                2. 학업(40점)/진로(40점)/공동체(20점) 총 100점 만점으로 점수를 산출하세요.
-                3. 학생용 피드백: 헛된 희망을 주지 않는 입학사정관 관점의 냉정한 현재 위치 진단(지원 가능 대학 라인), 여태까지했던 활동의 강점과 치명적 약점, 앞으로 3학년 및 다음 학기에 실행해야 할 구체적인 탐구 주제 및 활동 솔루션을 제시하세요.
-
-                [학생 제출 텍스트]:
-                {student_text[:7000]}
-
-                반드시 아래 지정된 순수 JSON 형식으로만 응답하세요 (마크다운 ```json 기호 절대 금지):
-                {{
-                    "scores": {{
-                        "academic": 33.0,
-                        "career": 32.5,
-                        "community": 16.5,
-                        "total": 82.0
-                    }},
-                    "student_feedback": {{
-                        "current_position": "입학사정관 관점 냉정한 현위치 진단 및 지원 가능 대학 라인",
-                        "strength_analysis": "여태까지 한 활동의 핵심 강점 분석",
-                        "weakness_analysis": "치명적인 약점 및 감점 요소 분석",
-                        "recommendation": "앞으로 3학년 및 다음 학기에 실행해야 할 구체적인 탐구 주제 및 과목 선택/활동 솔루션"
-                    }}
-                }}
-                """
-
-            try:
-                model = genai.GenerativeModel(model_option)
-                response = model.generate_content(prompt)
-                cleaned = response.text.strip().replace("```json", "").replace("```", "").strip()
-                result_json = json.loads(cleaned)
-                
-                st.session_state["eval_result"] = result_json
-                st.session_state["evaluated_filename"] = student_file.name
-                st.session_state["eval_mode_title"] = selected_feedback_type
-                st.success("🎉 분석 완료! 제출된 학생부 데이터는 메모리(RAM)에서 즉시 영구 파기되었습니다.")
-            except json.JSONDecodeError:
-                st.error("⚠️ AI 응답 형식을 해석하는 데 실패했습니다. 한 번 더 실행하시거나 모델을 변경해 보세요.")
-                st.code(response.text)
-            except Exception as e:
-                st.error(f"평가 중 오류가 발생했습니다: {e}")
+                try:
+                    model = genai.GenerativeModel(model_option)
+                    response = model.generate_content(prompt)
+                    cleaned = response.text.strip().replace("```json", "").replace("```", "").strip()
+                    result_json = json.loads(cleaned)
+                    
+                    st.session_state["eval_result"] = result_json
+                    st.session_state["evaluated_filename"] = student_file.name
+                    st.session_state["eval_mode_title"] = selected_feedback_type
+                    st.success("🎉 분석 완료! 제출된 학생부 데이터는 메모리(RAM)에서 즉시 영구 파기되었습니다.")
+                except json.JSONDecodeError:
+                    st.error("⚠️ AI 응답 형식을 해석하는 데 실패했습니다. 한 번 더 실행하시거나 모델을 변경해 보세요.")
+                    st.code(response.text)
+                except Exception as e:
+                    st.error(f"평가 중 오류가 발생했습니다: {e}")
 
 # --- 8. 채점 결과 및 맞춤형 피드백 출력 구역 (요구사항 3, 4, 9) ---
 if "eval_result" in st.session_state:
