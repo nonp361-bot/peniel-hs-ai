@@ -109,10 +109,10 @@ evaluator_mode = st.sidebar.radio(
 
 st.sidebar.divider()
 
-# 4-2. 피드백 버전 선택 (요구사항 9 보완)
+# 4-2. 피드백 버전 선택 (요구사항 9)
 st.sidebar.markdown("### 📝 2. 평가 및 피드백 버전 선택")
 feedback_category = st.sidebar.selectbox(
-    "피드백 대분류를 선택하세요.",
+    "피드백 대분류 선택",
     ["교사전용 피드백 버전", "학생용 피드백 버전"]
 )
 
@@ -130,7 +130,7 @@ if feedback_category == "교사전용 피드백 버전":
     )
 else:
     selected_feedback_type = "학생전용 피드백"
-    st.sidebar.info("🎓 학생의 현위치 진단, 활동 장단점 및 앞으로의 구체적 탐구 솔루션을 제공합니다.")
+    st.sidebar.info("🎓 학생 1인에 대한 현위치 진단, 활동 장단점 및 앞으로의 구체적 탐구 솔루션을 제공합니다.")
 
 st.sidebar.divider()
 
@@ -306,42 +306,76 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
     story.append(Paragraph(f"대상 파일: {student_filename}  |  평가 모드: {fb_type}", subtitle_style))
     story.append(Spacer(1, 4))
     
-    scores = eval_data.get("scores", {})
-    table_data = [
-        [Paragraph("<b>평가 영역</b>", body_style), Paragraph("<b>반영 요소</b>", body_style), Paragraph("<b>취득 점수</b>", body_style)],
-        [Paragraph("I. 학업역량 (40점)", body_style), Paragraph("성취도 분포 / 학업태도 / 비판적 탐구", body_style), Paragraph(f"<b>{scores.get('academic', 0)} / 40</b>", body_style)],
-        [Paragraph("II. 진로역량 (40점)", body_style), Paragraph("전공 이수 노력 / 전공 성취도 / 진로 탐색", body_style), Paragraph(f"<b>{scores.get('career', 0)} / 40</b>", body_style)],
-        [Paragraph("III. 공동체역량 (20점)", body_style), Paragraph("협업·소통 / 나눔·배려 / 성실성 / 리더십", body_style), Paragraph(f"<b>{scores.get('community', 0)} / 20</b>", body_style)],
-        [Paragraph("<b>✨ 최종 환산 총점</b>", body_style), Paragraph("<b>100점 만점 기준 종합 환산점수</b>", body_style), Paragraph(f"<b><font color='#EF4444'>{scores.get('total', 0)} / 100</font></b>", body_style)]
-    ]
-    t_score = Table(table_data, colWidths=[120, 280, 120])
-    t_score.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F3F4F6')),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')),
-        ('BACKGROUND', (0,4), (-1,4), colors.HexColor('#FEF2F2')),
-    ]))
-    story.append(t_score)
-    story.append(Spacer(1, 10))
-    
-    if "teacher_feedback" in eval_data:
-        story.append(Paragraph(f"👩‍🏫 [교사전용 정밀 피드백: {fb_type}]", h1_style))
-        tf = eval_data["teacher_feedback"]
-        story.append(Paragraph(f"• <b>👍 장점 분석:</b> {tf.get('strength', '')}", body_style))
-        story.append(Paragraph(f"• <b>⚠️ 보완점 및 감점 원인:</b> {tf.get('weakness', '')}", body_style))
-        if tf.get('quote'):
-            story.append(create_box(f"<b>🎯 원문 인용 근거:</b> \"{tf['quote']}\"", '#FEF3C7', '#F59E0B', '#451A03'))
-            
-    if "student_feedback" in eval_data:
-        story.append(Paragraph("🎓 [학생전용 현위치 진단 & 솔루션]", h1_style))
-        sf = eval_data["student_feedback"]
-        story.append(Paragraph("<b>1. 입학사정관 관점 냉정한 현위치 진단 (지원 가능 대학 라인)</b>", body_style))
-        story.append(create_box(sf.get("current_position", ""), '#F3F4F6', '#9CA3AF', '#111827'))
+    # 1) 과목 세특 교사 검점 모드 보고서
+    if fb_type == "과목세부능력 특기사항 전용 피드백" and "setuk_eval" in eval_data:
+        st_data = eval_data["setuk_eval"]
+        t_scores = st_data.get("scores", {})
+        
+        table_data = [
+            [Paragraph("<b>과세특 교사 점검 항목</b>", body_style), Paragraph("<b>배점</b>", body_style), Paragraph("<b>획득 점수</b>", body_style)],
+            [Paragraph("1. 학생 간 복붙 기재 여부", body_style), Paragraph("10점", body_style), Paragraph(f"{t_scores.get('duplication', 0)}점", body_style)],
+            [Paragraph("2. 학생 교과적 역량 서술", body_style), Paragraph("20점", body_style), Paragraph(f"{t_scores.get('academic_competence', 0)}점", body_style)],
+            [Paragraph("3. 교사 직접 관찰 반영", body_style), Paragraph("20점", body_style), Paragraph(f"{t_scores.get('teacher_observation', 0)}점", body_style)],
+            [Paragraph("4. AI 대필 / 문맥 어색함 검증", body_style), Paragraph("10점", body_style), Paragraph(f"{t_scores.get('ai_overuse', 0)}점", body_style)],
+            [Paragraph("5. 교과 성취기준 및 역량", body_style), Paragraph("20점", body_style), Paragraph(f"{t_scores.get('subject_competence', 0)}점", body_style)],
+            [Paragraph("6. 가독성 및 문장 구조", body_style), Paragraph("10점", body_style), Paragraph(f"{t_scores.get('readability', 0)}점", body_style)],
+            [Paragraph("7. 생기부 기재 금지 사항 준수", body_style), Paragraph("10점", body_style), Paragraph(f"{t_scores.get('prohibited_items', 0)}점", body_style)],
+            [Paragraph("<b>✨ 최종 과세특 작성 품질 총점</b>", body_style), Paragraph("<b>100점</b>", body_style), Paragraph(f"<b><font color='#EF4444'>{t_scores.get('total', 0)} / 100</font></b>", body_style)]
+        ]
+        t_score = Table(table_data, colWidths=[220, 100, 200])
+        t_score.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F3F4F6')),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')),
+            ('BACKGROUND', (0,8), (-1,8), colors.HexColor('#FEF2F2')),
+        ]))
+        story.append(t_score)
+        story.append(Spacer(1, 10))
+        
+        story.append(Paragraph("👩‍🏫 [과세특 개선 피드백 리포트]", h1_style))
+        story.append(Paragraph(f"• <b>총평:</b> {st_data.get('overall_summary', '')}", body_style))
+        story.append(Paragraph(f"• <b>잘된 점:</b> {st_data.get('good_points', '')}", body_style))
+        story.append(Paragraph(f"• <b>개선 필요사항:</b> {st_data.get('improvements', '')}", body_style))
         story.append(Spacer(1, 4))
-        story.append(Paragraph(f"• <b>강점:</b> {sf.get('strength_analysis', '')}", body_style))
-        story.append(Paragraph(f"• <b>치명적 약점:</b> {sf.get('weakness_analysis', '')}", body_style))
-        story.append(Spacer(1, 4))
-        story.append(Paragraph("<b>2. 향후 보완 추천 활동 및 구체적 탐구 주제 솔루션</b>", body_style))
-        story.append(create_box(sf.get("recommendation", ""), '#FEF2F2', '#EF4444', '#991B1B'))
+        story.append(create_box(f"<b>✏️ 수정·보완 추천 문장 가이드:</b><br/>{st_data.get('revision_examples', '')}", '#FEF2F2', '#EF4444', '#991B1B'))
+
+    # 2) 표준 생기부 평가 보고서
+    else:
+        scores = eval_data.get("scores", {})
+        table_data = [
+            [Paragraph("<b>평가 영역</b>", body_style), Paragraph("<b>반영 요소</b>", body_style), Paragraph("<b>취득 점수</b>", body_style)],
+            [Paragraph("I. 학업역량 (40점)", body_style), Paragraph("성취도 분포 / 학업태도 / 비판적 탐구", body_style), Paragraph(f"<b>{scores.get('academic', 0)} / 40</b>", body_style)],
+            [Paragraph("II. 진로역량 (40점)", body_style), Paragraph("전공 이수 노력 / 전공 성취도 / 진로 탐색", body_style), Paragraph(f"<b>{scores.get('career', 0)} / 40</b>", body_style)],
+            [Paragraph("III. 공동체역량 (20점)", body_style), Paragraph("협업·소통 / 나눔·배려 / 성실성 / 리더십", body_style), Paragraph(f"<b>{scores.get('community', 0)} / 20</b>", body_style)],
+            [Paragraph("<b>✨ 최종 환산 총점</b>", body_style), Paragraph("<b>100점 만점 기준 종합 환산점수</b>", body_style), Paragraph(f"<b><font color='#EF4444'>{scores.get('total', 0)} / 100</font></b>", body_style)]
+        ]
+        t_score = Table(table_data, colWidths=[120, 280, 120])
+        t_score.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F3F4F6')),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')),
+            ('BACKGROUND', (0,4), (-1,4), colors.HexColor('#FEF2F2')),
+        ]))
+        story.append(t_score)
+        story.append(Spacer(1, 10))
+        
+        if "teacher_feedback" in eval_data:
+            story.append(Paragraph(f"👩‍🏫 [교사전용 정밀 피드백: {fb_type}]", h1_style))
+            tf = eval_data["teacher_feedback"]
+            story.append(Paragraph(f"• <b>👍 장점 분석:</b> {tf.get('strength', '')}", body_style))
+            story.append(Paragraph(f"• <b>⚠️ 보완점 및 감점 원인:</b> {tf.get('weakness', '')}", body_style))
+            if tf.get('quote'):
+                story.append(create_box(f"<b>🎯 원문 인용 근거:</b> \"{tf['quote']}\"", '#FEF3C7', '#F59E0B', '#451A03'))
+                
+        if "student_feedback" in eval_data:
+            story.append(Paragraph("🎓 [학생전용 현위치 진단 & 솔루션]", h1_style))
+            sf = eval_data["student_feedback"]
+            story.append(Paragraph("<b>1. 입학사정관 관점 냉정한 현위치 진단 (지원 가능 대학 라인)</b>", body_style))
+            story.append(create_box(sf.get("current_position", ""), '#F3F4F6', '#9CA3AF', '#111827'))
+            story.append(Spacer(1, 4))
+            story.append(Paragraph(f"• <b>강점:</b> {sf.get('strength_analysis', '')}", body_style))
+            story.append(Paragraph(f"• <b>치명적 약점:</b> {sf.get('weakness_analysis', '')}", body_style))
+            story.append(Spacer(1, 4))
+            story.append(Paragraph("<b>2. 향후 보완 추천 활동 및 구체적 탐구 주제 솔루션</b>", body_style))
+            story.append(create_box(sf.get("recommendation", ""), '#FEF2F2', '#EF4444', '#991B1B'))
         
     doc.build(story)
     pdf_bytes = buffer.getvalue()
@@ -374,31 +408,73 @@ if student_file and api_key:
             if not criteria_full_text:
                 criteria_full_text = "2028학년도 대입 표준 학종 평가 지표 적용"
 
-            # 선택된 모드에 따라 프롬프트 최적화
-            prompt = f"""
-            당신은 전국 대학부종합전형 서류를 평가하는 [{evaluator_mode}]입니다.
-            제공된 [학생 생기부 텍스트]를 독해하고, 선택된 피드백 버전인 [{selected_feedback_type}]에 집중하여 정밀 평가와 피드백을 작성하세요.
+            # -------------------------------------------------------------
+            # [분기 1] 과목 세부능력 특기사항 전용 피드백 (수강생 전체/일부 점검용)
+            # -------------------------------------------------------------
+            if selected_feedback_type == "과목세부능력 특기사항 전용 피드백":
+                prompt = f"""
+                당신은 대학 입학사정관이자 교과세특 작성 컨설팅 전문가입니다.
+                제공된 [과목세특 텍스트]는 한 과목을 수강하는 수강학생들(1명~20명 이상)의 세특 기재 모음입니다.
+                교사가 자신이 작성한 과세특 기재 내용을 스스로 점검하고 개선할 수 있도록 아래 7가지 채점기준(100점 만점)에 맞춰 정밀하게 평가하세요.
 
-            [핵심 평가 지침]:
-            1. 평가자 관점: '{evaluator_mode}' 특성 반영.
-               - 인서울: 학업 심화성, Bloom 5-6단계, 전문교과 이수, 지적 호기심 확장 중점
-               - 지거국: 교과 충실도, 기초 학업역량, 권장 과목 이수, 성실성 중점
-            2. 파일에 일부 영역(예: 과목세특)만 있더라도 해당 영역에 집중하여 학업(40점)/진로(40점)/공동체(20점) 총 100점 만점으로 점수를 합리적으로 산출하세요. 절대 에러를 내지 마세요.
-            3. 선택된 모드 '{selected_feedback_type}'에 맞게 피드백을 작성하세요.
-               - 교사전용 모드일 경우: 해당 영역에 대한 구체적 장점, 보완점/감점 사유, 세특 원문 문장 인용을 적으세요.
-               - 학생전용 모드일 경우: 입학사정관 관점의 냉정한 현재 위치(지원 가능 대학 라인), 활동 강점, 치명적 약점, 향후 구체적 추천 탐구 주제 및 활동 솔루션을 적으세요.
+                [과세특 교사 점검 채점기준 (100점 만점)]:
+                1. 학생 간 복붙한 기록이 없는가 (10점 만점)
+                2. 학생의 교과적 역량을 잘 보여주는 기록인가 (20점 만점)
+                3. 교사의 직접 관찰이 들어간 기록인가 (20점 만점)
+                4. AI를 너무 돌려 맥락에 맞지 않는 단어나 문장이 들어가지 않았는가 (10점 만점)
+                5. 교과의 핵심 역량이 들어갔는가 (20점 만점)
+                6. 가독성이 높은가 (10점 만점)
+                7. 생기부 기재 금지 사항(대학명, 기관명, 상호명, 강사명 등)이 잘 반영되었는가 (10점 만점)
 
-            [채점 기준 참고 자료]:
-            {criteria_full_text[:12000]}
+                [채점 참고 문서]:
+                {criteria_full_text[:8000]}
 
-            [학생 제출 텍스트]:
-            {student_text[:15000]}
+                [업로드된 과목세특 모음 텍스트]:
+                {student_text[:15000]}
 
-            반드시 아래 지정된 순수 JSON 형식으로만 응답하세요 (마크다운 ```json 기호 절대 금지):
-            """
+                반드시 아래 지정된 순수 JSON 형식으로만 응답하세요 (마크다운 ```json 표기 절대 금지):
+                {{
+                    "setuk_eval": {{
+                        "scores": {{
+                            "duplication": 9,
+                            "academic_competence": 17,
+                            "teacher_observation": 16,
+                            "ai_overuse": 8,
+                            "subject_competence": 18,
+                            "readability": 8,
+                            "prohibited_items": 10,
+                            "total": 86
+                        }},
+                        "overall_summary": "전체 수강생 과세특에 대한 입학사정관/교사 점검 관점의 종합 평어",
+                        "good_points": "학생들의 차별화된 교과 역량 및 관찰 사실이 돋보이는 우수 기재 사례 및 장점 분석",
+                        "improvements": "학생 간 유사 표현, AI 템플릿 의심 문장, 추상적 평가어 나열 등 구체적 감점 및 보완점 사유",
+                        "revision_examples": "실제 제출된 과세특 문장 중 진부하거나 AI 오염이 의심되는 문장을 2~3개 꼽고, 이를 교사의 직접 관찰 및 교과 역량 중심으로 어떻게 수정하면 좋을지 '수정 전 ➔ 수정 후' 예시문 작성"
+                    }}
+                }}
+                """
 
-            if feedback_category == "교사전용 피드백 버전":
-                prompt += f"""
+            # -------------------------------------------------------------
+            # [분기 2] 교사 전용 (동아리, 자율, 진로, 행특, 종합) 피드백
+            # -------------------------------------------------------------
+            elif feedback_category == "교사전용 피드백 버전":
+                prompt = f"""
+                당신은 전국 대학부종합전형 서류를 평가하는 [{evaluator_mode}]입니다.
+                제공된 [학생 생기부 텍스트]를 독해하고, 선택된 피드백 버전인 [{selected_feedback_type}]에 집중하여 정밀 평가와 피드백을 작성하세요.
+
+                [핵심 평가 지침]:
+                1. 평가자 관점: '{evaluator_mode}' 특성 반영.
+                   - 인서울: 학업 심화성, Bloom 5-6단계, 전문교과 이수, 지적 호기심 확장 중점
+                   - 지거국: 교과 충실도, 기초 학업역량, 권장 과목 이수, 성실성 중점
+                2. 학업(40점)/진로(40점)/공동체(20점) 총 100점 만점으로 점수를 매기세요.
+                3. 선택된 피드백 영역('{selected_feedback_type}')에 집중하여 교사 관점의 장점, 보완점/감점 사유, 세특 원문 인용을 구체적으로 적으세요.
+
+                [채점 기준 참고 자료]:
+                {criteria_full_text[:10000]}
+
+                [학생 제출 텍스트]:
+                {student_text[:15000]}
+
+                반드시 아래 지정된 순수 JSON 형식으로만 응답하세요 (마크다운 ```json 표기 절대 금지):
                 {{
                     "scores": {{
                         "academic": 33.0,
@@ -414,22 +490,41 @@ if student_file and api_key:
                     }}
                 }}
                 """
+
+            # -------------------------------------------------------------
+            # [분기 3] 학생 전용 피드백 (현위치 진단 + 솔루션)
+            # -------------------------------------------------------------
             else:
-                prompt += """
-                {
-                    "scores": {
+                prompt = f"""
+                당신은 전국 대학부종합전형 서류를 평가하는 [{evaluator_mode}]입니다.
+                제공된 [학생 생기부 텍스트]를 독해하고 학생 전용 피드백 리포트를 작성하세요.
+
+                [핵심 평가 지침]:
+                1. 평가자 관점: '{evaluator_mode}' 특성 반영.
+                2. 학업(40점)/진로(40점)/공동체(20점) 총 100점 만점으로 점수를 산출하세요.
+                3. 학생용 피드백: 헛된 희망을 주지 않는 입학사정관 관점의 냉정한 현재 위치 진단(지원 가능 대학 라인), 여태까지 했던 활동의 강점과 치명적 약점, 앞으로 3학년 및 다음 학기에 실행해야 할 구체적인 탐구 주제 및 활동 솔루션을 제시하세요.
+
+                [채점 기준 참고 자료]:
+                {criteria_full_text[:10000]}
+
+                [학생 제출 텍스트]:
+                {student_text[:15000]}
+
+                반드시 아래 지정된 순수 JSON 형식으로만 응답하세요 (마크다운 ```json 표기 절대 금지):
+                {{
+                    "scores": {{
                         "academic": 33.0,
                         "career": 32.5,
                         "community": 16.5,
                         "total": 82.0
-                    },
-                    "student_feedback": {
+                    }},
+                    "student_feedback": {{
                         "current_position": "입학사정관 관점 냉정한 현위치 진단 및 지원 가능 대학 라인",
                         "strength_analysis": "여태까지 한 활동의 핵심 강점 분석",
                         "weakness_analysis": "치명적인 약점 및 감점 요소 분석",
                         "recommendation": "앞으로 3학년 및 다음 학기에 실행해야 할 구체적인 탐구 주제 및 과목 선택/활동 솔루션"
-                    }
-                }
+                    }}
+                }}
                 """
 
             try:
@@ -451,47 +546,78 @@ if student_file and api_key:
 # --- 9. 채점 결과 및 맞춤형 피드백 출력 구역 ---
 if "eval_result" in st.session_state:
     res = st.session_state["eval_result"]
-    scores = res.get("scores", {})
     fb_title = st.session_state.get("eval_mode_title", "")
     
     st.divider()
-    st.markdown(f"### 📊 평가 스코어 카드 (`{evaluator_mode}` 관점 / `{fb_title}`)")
     
-    col_s1, col_s2, col_s3, col_s4 = st.columns(4)
-    col_s1.metric("📕 학업역량", f"{scores.get('academic', 0)} / 40 점")
-    col_s2.metric("📗 진로역량", f"{scores.get('career', 0)} / 40 점")
-    col_s3.metric("📘 공동체역량", f"{scores.get('community', 0)} / 20 점")
-    col_s4.metric("✨ 최종 종합 점수", f"{scores.get('total', 0)} / 100 점")
-    
-    st.divider()
-    
-    # 📌 교사 전용 피드백 출력
-    if "teacher_feedback" in res:
-        st.subheader(f"👩‍🏫 NEIS 및 진학 지도용 교사전용 피드백 (`{fb_title}`)")
-        tf = res["teacher_feedback"]
-        st.success(f"**👍 핵심 장점:** {tf.get('strength', '')}")
-        st.warning(f"**⚠️ 보완점 및 감점 사유:** {tf.get('weakness', '')}")
-        if tf.get('quote'):
-            st.info(f"**🎯 원문 인용 근거:** \"{tf.get('quote')}\"")
+    # 📌 과목 세특 교사 점검 모드 결과 출력
+    if fb_title == "과목세부능력 특기사항 전용 피드백" and "setuk_eval" in res:
+        st_eval = res["setuk_eval"]
+        scores = st_eval.get("scores", {})
+        
+        st.markdown(f"### 📊 과목세부능력 특기사항 교사 기재 점검 표 (`{evaluator_mode}` 기준)")
+        st.metric("✨ 과세특 기재 품질 총점", f"{scores.get('total', 0)} / 100 점")
+        
+        st.divider()
+        st.markdown("#### 📋 7대 세부 점검 항목별 점수")
+        sc1, sc2, sc3, sc4 = st.columns(4)
+        sc1.metric("1. 학생간 복붙 방지", f"{scores.get('duplication', 0)} / 10점")
+        sc2.metric("2. 학생 교과역량", f"{scores.get('academic_competence', 0)} / 20점")
+        sc3.metric("3. 교사 직접 관찰", f"{scores.get('teacher_observation', 0)} / 20점")
+        sc4.metric("4. AI 대필 오염 방지", f"{scores.get('ai_overuse', 0)} / 10점")
+        
+        sc5, sc6, sc7, _ = st.columns(4)
+        sc5.metric("5. 교과 핵심 역량", f"{scores.get('subject_competence', 0)} / 20점")
+        sc6.metric("6. 가독성 및 문장", f"{scores.get('readability', 0)} / 10점")
+        sc7.metric("7. 기재금지 사항 준수", f"{scores.get('prohibited_items', 0)} / 10점")
+        
+        st.divider()
+        st.subheader("👩‍🏫 과세특 교사 자가점검 및 개선 피드백")
+        st.info(f"**📝 종합 총평:** {st_eval.get('overall_summary', '')}")
+        st.success(f"**👍 기재 우수 사항:** {st_eval.get('good_points', '')}")
+        st.warning(f"**⚠️ 보완 및 수정 필요사항:** {st_eval.get('improvements', '')}")
+        st.error(f"**✏️ 수정·보완 추천 문장 예시:**\n\n{st_eval.get('revision_examples', '')}")
 
-    # 📌 학생 전용 피드백 출력
-    if "student_feedback" in res:
-        st.subheader("🎓 학생 전용 쓴소리 진단 및 탐구 솔루션 리포트")
-        sf = res["student_feedback"]
+    # 📌 표준 생기부 / 기타 교사 / 학생 피드백 출력
+    else:
+        scores = res.get("scores", {})
+        st.markdown(f"### 📊 평가 스코어 카드 (`{evaluator_mode}` 관점 / `{fb_title}`)")
         
-        st.markdown("#### 🔍 1. 입학사정관 관점의 냉정한 현재 위치 (지원 가능 대학 라인)")
-        st.error(sf.get("current_position", ""))
+        col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+        col_s1.metric("📕 학업역량", f"{scores.get('academic', 0)} / 40 점")
+        col_s2.metric("📗 진로역량", f"{scores.get('career', 0)} / 40 점")
+        col_s3.metric("📘 공동체역량", f"{scores.get('community', 0)} / 20 점")
+        col_s4.metric("✨ 최종 종합 점수", f"{scores.get('total', 0)} / 100 점")
         
-        col_st1, col_st2 = st.columns(2)
-        with col_st1:
-            st.markdown("#### 👍 2. 기존 활동의 주요 강점")
-            st.success(sf.get("strength_analysis", ""))
-        with col_st2:
-            st.markdown("#### 🚨 3. 치명적인 약점 및 감점 요소")
-            st.warning(sf.get("weakness_analysis", ""))
+        st.divider()
+        
+        # 교사 전용 피드백 출력
+        if "teacher_feedback" in res:
+            st.subheader(f"👩‍🏫 NEIS 및 진학 지도용 교사전용 피드백 (`{fb_title}`)")
+            tf = res["teacher_feedback"]
+            st.success(f"**👍 핵심 장점:** {tf.get('strength', '')}")
+            st.warning(f"**⚠️ 보완점 및 감점 사유:** {tf.get('weakness', '')}")
+            if tf.get('quote'):
+                st.info(f"**🎯 원문 인용 근거:** \"{tf.get('quote')}\"")
+
+        # 학생 전용 피드백 출력
+        if "student_feedback" in res:
+            st.subheader("🎓 학생 전용 쓴소리 진단 및 탐구 솔루션 리포트")
+            sf = res["student_feedback"]
             
-        st.markdown("#### 🚀 4. 앞으로의 구체적 추천 활동 및 탐구 주제 솔루션")
-        st.info(sf.get("recommendation", ""))
+            st.markdown("#### 🔍 1. 입학사정관 관점의 냉정한 현재 위치 (지원 가능 대학 라인)")
+            st.error(sf.get("current_position", ""))
+            
+            col_st1, col_st2 = st.columns(2)
+            with col_st1:
+                st.markdown("#### 👍 2. 기존 활동의 주요 강점")
+                st.success(sf.get("strength_analysis", ""))
+            with col_st2:
+                st.markdown("#### 🚨 3. 치명적인 약점 및 감점 요소")
+                st.warning(sf.get("weakness_analysis", ""))
+                
+            st.markdown("#### 🚀 4. 앞으로의 구체적 추천 활동 및 탐구 주제 솔루션")
+            st.info(sf.get("recommendation", ""))
 
     st.divider()
     
@@ -520,19 +646,30 @@ if "eval_result" in st.session_state:
     with d2:
         txt_content = f"=== 브니엘고 AI 생기부 평가 리포트 ({evaluator_mode}) ===\n"
         txt_content += f"평가 모드: {fb_title}\n\n"
-        txt_content += f"종합 점수: {scores.get('total', 0)} / 100\n"
-        txt_content += f"- 학업역량: {scores.get('academic', 0)}/40\n"
-        txt_content += f"- 진로역량: {scores.get('career', 0)}/40\n"
-        txt_content += f"- 공동체역량: {scores.get('community', 0)}/20\n\n"
         
-        if "teacher_feedback" in res:
-            tf = res["teacher_feedback"]
-            txt_content += f"[교사 피드백 장점]\n{tf.get('strength', '')}\n\n"
-            txt_content += f"[교사 피드백 보완점]\n{tf.get('weakness', '')}\n\n"
-        if "student_feedback" in res:
-            sf = res["student_feedback"]
-            txt_content += f"[학생 현위치 진단]\n{sf.get('current_position', '')}\n\n"
-            txt_content += f"[추천 탐구 주제 솔루션]\n{sf.get('recommendation', '')}\n"
+        if fb_title == "과목세부능력 특기사항 전용 피드백" and "setuk_eval" in res:
+            st_eval = res["setuk_eval"]
+            t_sc = st_eval.get("scores", {})
+            txt_content += f"과세특 기재품질 점수: {t_sc.get('total', 0)} / 100\n\n"
+            txt_content += f"[종합 평어]\n{st_eval.get('overall_summary', '')}\n\n"
+            txt_content += f"[우수 사항]\n{st_eval.get('good_points', '')}\n\n"
+            txt_content += f"[보완 및 수정 필요사항]\n{st_eval.get('improvements', '')}\n\n"
+            txt_content += f"[수정 추천 문장 예시]\n{st_eval.get('revision_examples', '')}\n"
+        else:
+            scores = res.get("scores", {})
+            txt_content += f"종합 점수: {scores.get('total', 0)} / 100\n"
+            txt_content += f"- 학업역량: {scores.get('academic', 0)}/40\n"
+            txt_content += f"- 진로역량: {scores.get('career', 0)}/40\n"
+            txt_content += f"- 공동체역량: {scores.get('community', 0)}/20\n\n"
+            
+            if "teacher_feedback" in res:
+                tf = res["teacher_feedback"]
+                txt_content += f"[교사 피드백 장점]\n{tf.get('strength', '')}\n\n"
+                txt_content += f"[교사 피드백 보완점]\n{tf.get('weakness', '')}\n\n"
+            if "student_feedback" in res:
+                sf = res["student_feedback"]
+                txt_content += f"[학생 현위치 진단]\n{sf.get('current_position', '')}\n\n"
+                txt_content += f"[추천 탐구 주제 솔루션]\n{sf.get('recommendation', '')}\n"
             
         st.download_button(
             label="📝 간이 리포트 TXT 다운로드",
