@@ -31,7 +31,7 @@ os.makedirs(CRITERIA_DB_DIR, exist_ok=True)
 
 # --- 3. 헬퍼 함수 ---
 def extract_text_from_pdf_stream(pdf_file):
-    """RAM(메모리) 상에서 직접 PDF 텍스트 추출 - 휘발성 처리"""
+    """RAM(메모리) 상에서 직접 PDF 텍스트 추출 - 개인정보 휘발성 처리"""
     if pdf_file is None:
         return ""
     try:
@@ -109,7 +109,7 @@ evaluator_mode = st.sidebar.radio(
 
 st.sidebar.divider()
 
-# 4-2. 피드백 버전 선택 (요구사항 9 - 사용자 직접 선택 유도 보완)
+# 4-2. 피드백 버전 선택 (요구사항 9 - 미선택 상태 기본 지정으로 초기 속도 최적화)
 st.sidebar.markdown("### 📝 2. 평가 및 피드백 버전 선택")
 feedback_category = st.sidebar.selectbox(
     "피드백 대분류 선택",
@@ -127,7 +127,7 @@ if feedback_category == "교사전용 피드백 버전":
             "행동발달특기사항 전용 피드백",
             "생기부 종합 전용 피드백"
         ],
-        index=0  # 기본값을 '미선택'으로 설정하여 빠른 사이트 세팅 보장
+        index=0  # 기본값 미선택
     )
 else:
     selected_feedback_type = "학생전용 피드백"
@@ -167,7 +167,7 @@ model_option = st.sidebar.selectbox(
 
 st.sidebar.divider()
 
-# 4-5. 채점 기준 파일 관리 (무제한 업로드 & 영구 보관)
+# 4-5. 채점 기준 파일 관리 (무제한 업로드 & 영구 보관 - 요구사항 6, 7)
 st.sidebar.markdown("### 📚 대학별 채점기준 DB (영구보관)")
 uploaded_criteria = st.sidebar.file_uploader(
     "채점기준 PDF/TXT 업로드 (무제한)",
@@ -207,11 +207,11 @@ st.markdown(f"**현재 관점:** `{evaluator_mode}` | **선택된 피드백 모�
 
 st.markdown("### 📋 AI 실시간 통합 채점 기준표 (메인 상시 노출)")
 
-# 📌 [경로 A] 사용자가 아직 영역을 선택하지 않았을 때 (초기 빠른 화면)
+# 📌 [경로 A] 세부 평가 영역 미선택 시 (즉시 로딩)
 if selected_feedback_type == "선택해주세요 (세부 평가 영역 미선택)":
     st.warning("👈 **왼쪽 사이드바의 [2. 평가 및 피드백 버전 선택]에서 원하시는 세부 평가 영역을 선택해 주세요.**")
 
-# 📌 [경로 B] 과목 세부능력 특기사항 전용 피드백 선택 시 7대 점검 항목 즉시 노출
+# 📌 [경로 B] 과목 세부능력 특기사항 전용 피드백 선택 시 7대 교사 점검 항목 표 노출 (API 연동 X -> 429 오류 완벽 차단)
 elif selected_feedback_type == "과목세부능력 특기사항 전용 피드백":
     st.info("💡 **과목 세부능력 특기사항 교사 자가점검 7대 핵심 채점기준표 (100점 만점)**")
     st.markdown("""
@@ -273,28 +273,28 @@ elif selected_feedback_type == "과목세부능력 특기사항 전용 피드백
     </div>
     """, unsafe_allow_html=True)
 
-# 📌 [경로 C] 기타 생기부 영역 및 학생용 탭 선택 시 삼분 배점 기준표 표출
+# 📌 [경로 C] 기타 생기부 영역 및 학생용 탭 선택 시 삼분 배점 기준표 표출 (요구사항 8)
 else:
     col_c1, col_c2, col_c3 = st.columns(3)
     with col_c1:
         st.info("📕 **1. 학업역량 (40점 만점)**")
-        st.markdown("- **성취도 분포 및 이수환경의 상대적 우위성**: 원점수, 평균, 성취도 분포 종합 해석")
-        st.markdown("- **행동 동기 및 어려움 극복 서사 기반 학업태도**: 교사 직접 관찰 기반 자발적 열의")
-        st.markdown("- **디지털 리터러시 및 비판적 미디어 탐구 역량**: Bloom 5-6단계 및 비판적 사고")
+        st.markdown("- **성취도 분포 및 이수환경의 상대적 우위성**: 원점수, 과목평균, 수강인원, 성취도 분포 종합 해석")
+        st.markdown("- **행동 동기 및 어려움 극복 서사 기반 학업태도**: 교사 직접 관찰 기반 자발적 탐구 열의")
+        st.markdown("- **디지털 리터러시 및 비판적 미디어 탐구 역량**: Bloom 5-6단계 사고 및 비판적 미디어 활용")
     with col_c2:
         st.success("📗 **2. 진로역량 (40점 만점)**")
-        st.markdown("- **전공 연계 교과의 위계적 이수 노력**: 선택과목의 위계성 및 이수 동기")
-        st.markdown("- **전공 관련 주요 교과 성취도 차별성**: 전공 교과 성취도 및 전공적 사고방식")
-        st.markdown("- **교과-창체 연계 진로 에피소드**: 문헌 비판적 독해 및 활동 간 일관성")
+        st.markdown("- **전공 연계 교과의 위계적 이수 노력**: 권장 이수과목, 과목 위계성 및 선택 동기")
+        st.markdown("- **전공 관련 주요 교과 성취도 차별성**: 전공 관련 교과 성취도 차별성 및 전공적 사고")
+        st.markdown("- **교과-창체 연계 진로 에피소드**: 문헌 비판적 독해 및 활동 간 수직/수평적 일관성")
     with col_c3:
         st.warning("📘 **3. 공동체역량 (20점 만점)**")
-        st.markdown("- **다원적 환경에서의 협업 및 소통 역량**: 실질적 역할 수행 및 오해 조율")
-        st.markdown("- **특정 대상을 도운 구체적 나눔과 배려**: 구체적 에피소드 중심의 나눔 실천")
-        st.markdown("- **성실성과 규칙 준수 및 자발적 리더십**: 무단 출결 배제 및 솔선수범")
+        st.markdown("- **다원적 환경에서의 협업 및 소통 역량**: 실질적 역할 기여 및 갈등/오해 조율")
+        st.markdown("- **특정 대상을 도운 구체적 나눔과 배려**: 구체적 에피소드 중심의 사회적 가치 실천")
+        st.markdown("- **성실성과 규칙 준수 및 자발적 리더십**: 무단 출결 배제, 규칙 준수 및 솔선수범")
 
 st.divider()
 
-# --- 6. PDF 리포트 생성 함수 (ReportLab) ---
+# --- 6. PDF 리포트 생성 함수 (ReportLab 연동 - 요구사항 5) ---
 def generate_pdf_report(eval_data, student_filename, mode, fb_type):
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=35, leftMargin=35, topMargin=35, bottomMargin=35)
@@ -331,7 +331,7 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
     story.append(Paragraph(f"대상 파일: {student_filename}  |  평가 모드: {fb_type}", subtitle_style))
     story.append(Spacer(1, 4))
     
-    # 과목 세특 교사 점검 리포트
+    # 1) 과목 세특 교사 점검 리포트
     if fb_type == "과목세부능력 특기사항 전용 피드백" and "setuk_eval" in eval_data:
         st_data = eval_data["setuk_eval"]
         t_scores = st_data.get("scores", {})
@@ -363,7 +363,7 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
         story.append(Spacer(1, 4))
         story.append(create_box(f"<b>✏️ 수정·보완 추천 문장 가이드:</b><br/>{st_data.get('revision_examples', '')}", '#FEF2F2', '#EF4444', '#991B1B'))
 
-    # 표준 생기부 리포트
+    # 2) 표준 생기부 리포트
     else:
         scores = eval_data.get("scores", {})
         table_data = [
@@ -407,7 +407,7 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
     buffer.close()
     return pdf_bytes
 
-# --- 7. 학생부 PDF 제출 및 AI 평가 구역 ---
+# --- 7. 학생부 PDF 제출 및 AI 평가 구역 (요구사항 2 - 개인정보 휘발 처리) ---
 st.markdown("### 📂 학생부 PDF 제출 및 맞춤형 AI 채점")
 st.caption("🔒 제출한 생기부 PDF는 디스크에 저장되지 않으며, RAM에서 읽어 평가 후 즉시 영구 휘발 삭제됩니다.")
 
@@ -417,12 +417,12 @@ if student_file and api_key:
     st.success(f"📎 학생부 파일 로드 완료: {student_file.name}")
     
     if selected_feedback_type == "선택해주세요 (세부 평가 영역 미선택)":
-        st.warning("⚠️ 왼쪽 사이드바에서 [세부 평가 영역]을 먼선 선택해야 AI 평가를 시작할 수 있습니다.")
+        st.warning("⚠️ 왼쪽 사이드바에서 [세부 평가 영역]을 먼저 선택해야 AI 평가를 시작할 수 있습니다.")
     else:
         if st.button("🔥 선택한 버전으로 AI 정밀 평가 시작하기", type="primary", use_container_width=True):
             with st.spinner(f"🧠 AI 사정관이 [{evaluator_mode}] 관점에서 [{selected_feedback_type}] 맞춤 정밀 검증을 진행 중입니다..."):
                 
-                # RAM 상에서 읽기 (개인정보 휘발)
+                # RAM 상에서 읽기 (개인정보 휘발성)
                 student_text = extract_text_from_pdf_stream(student_file)
                 
                 if not student_text.strip():
@@ -431,7 +431,7 @@ if student_file and api_key:
                     
                 criteria_full_text = ""
                 for fname in selected_criteria_files:
-                    criteria_full_text += f"\n--- [{fname}] ---\n" + load_local_file_text(fname)[:2000]
+                    criteria_full_text += f"\n--- [{fname}] ---\n" + load_local_file_text(fname)[:1500]
                 
                 if not criteria_full_text:
                     criteria_full_text = "2028학년도 대입 표준 학종 평가 지표 적용"
@@ -453,7 +453,7 @@ if student_file and api_key:
                     7. 생기부 기재 금지 사항(대학명, 기관명, 상호명, 강사명 등)이 잘 반영되었는가 (10점 만점)
 
                     [업로드된 과목세특 모음 텍스트]:
-                    {student_text[:8000]}
+                    {student_text[:7000]}
 
                     반드시 아래 지정된 순수 JSON 형식으로만 응답하세요 (마크다운 ```json 기호 절대 금지):
                     {{
@@ -476,7 +476,7 @@ if student_file and api_key:
                     }}
                     """
 
-                # [분기 2] 교사 전용 (동아리, 자율/진로, 행특, 종합) 피드백
+                # [분기 2] 교사 전용 (동아리, 자율/진로, 행특, 종합) 피드백 (요구사항 3, 4, 9)
                 elif feedback_category == "교사전용 피드백 버전":
                     prompt = f"""
                     당신은 전국 대학부종합전형 서류를 평가하는 [{evaluator_mode}]입니다.
@@ -488,7 +488,7 @@ if student_file and api_key:
                     3. 선택된 피드백 영역('{selected_feedback_type}')에 집중하여 교사 관점의 장점, 보완점/감점 사유, 세특 원문 인용을 구체적으로 적으세요.
 
                     [학생 제출 텍스트]:
-                    {student_text[:8000]}
+                    {student_text[:7000]}
 
                     반드시 아래 지정된 순수 JSON 형식으로만 응답하세요 (마크다운 ```json 기호 절대 금지):
                     {{
@@ -507,7 +507,7 @@ if student_file and api_key:
                     }}
                     """
 
-                # [분기 3] 학생 전용 피드백
+                # [분기 3] 학생 전용 피드백 (요구사항 9)
                 else:
                     prompt = f"""
                     당신은 전국 대학부종합전형 서류를 평가하는 [{evaluator_mode}]입니다.
@@ -519,7 +519,7 @@ if student_file and api_key:
                     3. 학생용 피드백: 헛된 희망을 주지 않는 입학사정관 관점의 냉정한 현재 위치 진단(지원 가능 대학 라인), 여태까지 했던 활동의 강점과 치명적 약점, 앞으로 3학년 및 다음 학기에 실행해야 할 구체적인 탐구 주제 및 활동 솔루션을 제시하세요.
 
                     [학생 제출 텍스트]:
-                    {student_text[:8000]}
+                    {student_text[:7000]}
 
                     반드시 아래 지정된 순수 JSON 형식으로만 응답하세요 (마크다운 ```json 기호 절대 금지):
                     {{
@@ -554,7 +554,7 @@ if student_file and api_key:
                 except Exception as e:
                     st.error(f"평가 중 오류가 발생했습니다: {e}")
 
-# --- 8. 채점 결과 및 맞춤형 피드백 출력 구역 ---
+# --- 8. 채점 결과 및 맞춤형 피드백 출력 구역 (요구사항 3, 4, 9) ---
 if "eval_result" in st.session_state:
     res = st.session_state["eval_result"]
     fb_title = st.session_state.get("eval_mode_title", "")
@@ -630,7 +630,7 @@ if "eval_result" in st.session_state:
 
     st.divider()
     
-    # --- 9. PDF / TXT 다운로드 기능 ---
+    # --- 9. PDF / TXT 다운로드 기능 (요구사항 5) ---
     st.markdown("### 📥 3단계: 정밀 진단 보고서 다운로드")
     d1, d2 = st.columns(2)
     
