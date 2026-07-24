@@ -109,7 +109,7 @@ evaluator_mode = st.sidebar.radio(
 
 st.sidebar.divider()
 
-# 4-2. 피드백 버전 선택 (요구사항 9 - 미선택 상태 기본 지정으로 초기 속도 최적화)
+# 4-2. 피드백 버전 선택 (요구사항 9 - 미선택 상태 기본 지정으로 속도 최적화)
 st.sidebar.markdown("### 📝 2. 평가 및 피드백 버전 선택")
 feedback_category = st.sidebar.selectbox(
     "피드백 대분류 선택",
@@ -127,7 +127,7 @@ if feedback_category == "교사전용 피드백 버전":
             "행동발달특기사항 전용 피드백",
             "생기부 종합 전용 피드백"
         ],
-        index=0  # 기본값 미선택
+        index=0  # 기본값: 미선택
     )
 else:
     selected_feedback_type = "학생전용 피드백"
@@ -167,7 +167,7 @@ model_option = st.sidebar.selectbox(
 
 st.sidebar.divider()
 
-# 4-5. 채점 기준 파일 관리 (무제한 업로드 & 영구 보관 - 요구사항 6, 7)
+# 4-5. 채점 기준 파일 관리 (무제한 업로드 & 영구 보관)
 st.sidebar.markdown("### 📚 대학별 채점기준 DB (영구보관)")
 uploaded_criteria = st.sidebar.file_uploader(
     "채점기준 PDF/TXT 업로드 (무제한)",
@@ -199,7 +199,7 @@ if accumulated_files:
                 os.remove(os.path.join(CRITERIA_DB_DIR, file_name))
         st.rerun()
 
-# --- 5. 메인 화면 헤더 및 실시간 채점 기준표 노출 ---
+# --- 5. 메인 화면 헤더 및 실시간 채점 기준표 노출 (요구사항 6, 7, 8) ---
 st.title("🏫 브니엘고등학교 AI 생기부 정밀 평가 시스템")
 
 display_mode_str = selected_feedback_type if selected_feedback_type != "선택해주세요 (세부 평가 영역 미선택)" else "영역 미선택 (좌측 사이드바에서 선택)"
@@ -207,11 +207,11 @@ st.markdown(f"**현재 관점:** `{evaluator_mode}` | **선택된 피드백 모�
 
 st.markdown("### 📋 AI 실시간 통합 채점 기준표 (메인 상시 노출)")
 
-# 📌 [경로 A] 세부 평가 영역 미선택 시 (즉시 로딩)
+# 📌 [경로 A] 세부 평가 영역 미선택 시 (초기 즉시 진입 로딩)
 if selected_feedback_type == "선택해주세요 (세부 평가 영역 미선택)":
     st.warning("👈 **왼쪽 사이드바의 [2. 평가 및 피드백 버전 선택]에서 원하시는 세부 평가 영역을 선택해 주세요.**")
 
-# 📌 [경로 B] 과목 세부능력 특기사항 전용 피드백 선택 시 7대 교사 점검 항목 표 노출 (API 연동 X -> 429 오류 완벽 차단)
+# 📌 [경로 B] 과목 세부능력 특기사항 전용 피드백 선택 시 7대 교사 점검 항목 표 노출 (API 호출 X -> 429 오류 차단)
 elif selected_feedback_type == "과목세부능력 특기사항 전용 피드백":
     st.info("💡 **과목 세부능력 특기사항 교사 자가점검 7대 핵심 채점기준표 (100점 만점)**")
     st.markdown("""
@@ -541,148 +541,4 @@ if student_file and api_key:
                 try:
                     model = genai.GenerativeModel(model_option)
                     response = model.generate_content(prompt)
-                    cleaned = response.text.strip().replace("```json", "").replace("```", "").strip()
-                    result_json = json.loads(cleaned)
-                    
-                    st.session_state["eval_result"] = result_json
-                    st.session_state["evaluated_filename"] = student_file.name
-                    st.session_state["eval_mode_title"] = selected_feedback_type
-                    st.success("🎉 분석 완료! 제출된 학생부 데이터는 메모리(RAM)에서 즉시 영구 파기되었습니다.")
-                except json.JSONDecodeError:
-                    st.error("⚠️ AI 응답 형식을 해석하는 데 실패했습니다. 한 번 더 실행하시거나 모델을 변경해 보세요.")
-                    st.code(response.text)
-                except Exception as e:
-                    st.error(f"평가 중 오류가 발생했습니다: {e}")
-
-# --- 8. 채점 결과 및 맞춤형 피드백 출력 구역 (요구사항 3, 4, 9) ---
-if "eval_result" in st.session_state:
-    res = st.session_state["eval_result"]
-    fb_title = st.session_state.get("eval_mode_title", "")
-    
-    st.divider()
-    
-    # 📌 과목 세특 교사 점검 모드 결과 출력
-    if fb_title == "과목세부능력 특기사항 전용 피드백" and "setuk_eval" in res:
-        st_eval = res["setuk_eval"]
-        scores = st_eval.get("scores", {})
-        
-        st.markdown(f"### 📊 과목세부능력 특기사항 교사 기재 점검 표 (`{evaluator_mode}` 기준)")
-        st.metric("✨ 과세특 기재 품질 총점", f"{scores.get('total', 0)} / 100 점")
-        
-        st.divider()
-        st.markdown("#### 📋 7대 세부 점검 항목별 점수")
-        sc1, sc2, sc3, sc4 = st.columns(4)
-        sc1.metric("1. 학생 교과역량", f"{scores.get('academic_competence', 0)} / 20점")
-        sc2.metric("2. 교사 직접 관찰", f"{scores.get('teacher_observation', 0)} / 20점")
-        sc3.metric("3. 교과 핵심 역량", f"{scores.get('subject_competence', 0)} / 20점")
-        sc4.metric("4. 학생간 복붙 방지", f"{scores.get('duplication', 0)} / 10점")
-        
-        sc5, sc6, sc7, _ = st.columns(4)
-        sc5.metric("5. AI 대필 오염 방지", f"{scores.get('ai_overuse', 0)} / 10점")
-        sc6.metric("6. 가독성 및 문장", f"{scores.get('readability', 0)} / 10점")
-        sc7.metric("7. 기재금지 사항 준수", f"{scores.get('prohibited_items', 0)} / 10점")
-        
-        st.divider()
-        st.subheader("👩‍🏫 과세특 교사 자가점검 및 개선 피드백")
-        st.info(f"**📝 종합 총평:** {st_eval.get('overall_summary', '')}")
-        st.success(f"**👍 기재 우수 사항:** {st_eval.get('good_points', '')}")
-        st.warning(f"**⚠️ 보완 및 수정 필요사항:** {st_eval.get('improvements', '')}")
-        st.error(f"**✏️ 수정·보완 추천 문장 예시:**\n\n{st_eval.get('revision_examples', '')}")
-
-    # 📌 표준 생기부 / 기타 교사 / 학생 피드백 출력
-    else:
-        scores = res.get("scores", {})
-        st.markdown(f"### 📊 평가 스코어 카드 (`{evaluator_mode}` 관점 / `{fb_title}`)")
-        
-        col_s1, col_s2, col_s3, col_s4 = st.columns(4)
-        col_s1.metric("📕 학업역량", f"{scores.get('academic', 0)} / 40 점")
-        col_s2.metric("📗 진로역량", f"{scores.get('career', 0)} / 40 점")
-        col_s3.metric("📘 공동체역량", f"{scores.get('community', 0)} / 20 점")
-        col_s4.metric("✨ 최종 종합 점수", f"{scores.get('total', 0)} / 100 점")
-        
-        st.divider()
-        
-        if "teacher_feedback" in res:
-            st.subheader(f"👩‍🏫 NEIS 및 진학 지도용 교사전용 피드백 (`{fb_title}`)")
-            tf = res["teacher_feedback"]
-            st.success(f"**👍 핵심 장점:** {tf.get('strength', '')}")
-            st.warning(f"**⚠️ 보완점 및 감점 사유:** {tf.get('weakness', '')}")
-            if tf.get('quote'):
-                st.info(f"**🎯 원문 인용 근거:** \"{tf.get('quote')}\"")
-
-        if "student_feedback" in res:
-            st.subheader("🎓 학생 전용 쓴소리 진단 및 탐구 솔루션 리포트")
-            sf = res["student_feedback"]
-            
-            st.markdown("#### 🔍 1. 입학사정관 관점의 냉정한 현재 위치 (지원 가능 대학 라인)")
-            st.error(sf.get("current_position", ""))
-            
-            col_st1, col_st2 = st.columns(2)
-            with col_st1:
-                st.markdown("#### 👍 2. 기존 활동의 주요 강점")
-                st.success(sf.get("strength_analysis", ""))
-            with col_st2:
-                st.markdown("#### 🚨 3. 치명적인 약점 및 감점 요소")
-                st.warning(sf.get("weakness_analysis", ""))
-                
-            st.markdown("#### 🚀 4. 앞으로의 구체적 추천 활동 및 탐구 주제 솔루션")
-            st.info(sf.get("recommendation", ""))
-
-    st.divider()
-    
-    # --- 9. PDF / TXT 다운로드 기능 (요구사항 5) ---
-    st.markdown("### 📥 3단계: 정밀 진단 보고서 다운로드")
-    d1, d2 = st.columns(2)
-    
-    with d1:
-        if REPORTLAB_AVAILABLE:
-            pdf_bytes = generate_pdf_report(
-                res, 
-                st.session_state.get("evaluated_filename", "student.pdf"), 
-                evaluator_mode, 
-                fb_title
-            )
-            st.download_button(
-                label="📄 정밀 진단 보고서 PDF 다운로드",
-                data=pdf_bytes,
-                file_name=f"브니엘고_AI_생기부평가_{evaluator_mode}_{st.session_state.get('evaluated_filename', 'student').replace('.pdf','')}.pdf",
-                mime="application/pdf",
-                use_container_width=True
-            )
-        else:
-            st.warning("ReportLab 모듈이 누락되었습니다. (`pip install reportlab` 필요)")
-            
-    with d2:
-        txt_content = f"=== 브니엘고 AI 생기부 평가 리포트 ({evaluator_mode}) ===\n"
-        txt_content += f"평가 모드: {fb_title}\n\n"
-        
-        if fb_title == "과목세부능력 특기사항 전용 피드백" and "setuk_eval" in res:
-            st_eval = res["setuk_eval"]
-            t_sc = st_eval.get("scores", {})
-            txt_content += f"과세특 기재품질 점수: {t_sc.get('total', 0)} / 100\n\n"
-            txt_content += f"[종합 평어]\n{st_eval.get('overall_summary', '')}\n\n"
-            txt_content += f"[우수 사항]\n{st_eval.get('good_points', '')}\n\n"
-            txt_content += f"[보완 및 수정 필요사항]\n{st_eval.get('improvements', '')}\n\n"
-            txt_content += f"[수정 추천 문장 예시]\n{st_eval.get('revision_examples', '')}\n"
-        else:
-            scores = res.get("scores", {})
-            txt_content += f"종합 점수: {scores.get('total', 0)} / 100\n"
-            txt_content += f"- 학업역량: {scores.get('academic', 0)}/40\n"
-            txt_content += f"- 진로역량: {scores.get('career', 0)}/40\n"
-            txt_content += f"- 공동체역량: {scores.get('community', 0)}/20\n\n"
-            
-            if "teacher_feedback" in res:
-                tf = res["teacher_feedback"]
-                txt_content += f"[교사 피드백 장점]\n{tf.get('strength', '')}\n\n"
-                txt_content += f"[교사 피드백 보완점]\n{tf.get('weakness', '')}\n\n"
-            if "student_feedback" in res:
-                sf = res["student_feedback"]
-                txt_content += f"[학생 현위치 진단]\n{sf.get('current_position', '')}\n\n"
-                txt_content += f"[추천 탐구 주제 솔루션]\n{sf.get('recommendation', '')}\n"
-            
-        st.download_button(
-            label="📝 간이 리포트 TXT 다운로드",
-            data=txt_content,
-            file_name="생기부_평가_요약.txt",
-            use_container_width=True
-        )
+                    cleaned = response.text.strip().replace("
