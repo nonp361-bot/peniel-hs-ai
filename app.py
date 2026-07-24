@@ -25,13 +25,13 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- 2. 로컬 채점 기준 보관 폴더 (영구 저장) ---
+# --- 2. 로컬 채점 기준 보관 폴더 (영구 저장 - 요구사항 6, 7) ---
 CRITERIA_DB_DIR = "criteria_database"
 os.makedirs(CRITERIA_DB_DIR, exist_ok=True)
 
 # --- 3. 헬퍼 함수 ---
 def extract_text_from_pdf_stream(pdf_file):
-    """RAM(메모리) 상에서 직접 PDF 텍스트 추출 - 개인정보 휘발성 처리"""
+    """RAM(메모리) 상에서 직접 PDF 텍스트 추출 - 개인정보 휘발성 처리 (요구사항 2)"""
     if pdf_file is None:
         return ""
     try:
@@ -95,8 +95,34 @@ def get_korean_font_path():
     return None
 
 # --- 4. 사이드바 구성 ---
+
+# 4-0. 상태값 상수 정의 (오타/불일치로 인한 표시 오류 방지)
+CATEGORY_PLACEHOLDER = "--- 피드백 대분류 선택 ---"
+DETAIL_PLACEHOLDER = "--- 세부 영역 선택 ---"
+SETUK_LABEL = "과목세부능력 특기사항 전용 피드백"
+STUDENT_LABEL = "학생전용 피드백"
+
+# 4-0-1. 세션 최초 진입 시(=이 세션에서 한 번도 값이 설정된 적 없을 때)에만 기본값을 강제로 지정.
+# 위젯의 index 파라미터는 key가 이미 session_state에 존재하면 무시되므로,
+# "새로 접속했는데도 이전 선택값이 남아있는" 현상을 막기 위해 명시적으로 초기화한다.
+if "feedback_category_select" not in st.session_state:
+    st.session_state["feedback_category_select"] = CATEGORY_PLACEHOLDER
+if "teacher_detail_radio" not in st.session_state:
+    st.session_state["teacher_detail_radio"] = DETAIL_PLACEHOLDER
+
+def _reset_detail_selection():
+    """대분류(피드백 카테고리)가 바뀌면 세부 영역 선택을 항상 placeholder로 되돌린다."""
+    st.session_state["teacher_detail_radio"] = DETAIL_PLACEHOLDER
+
 st.sidebar.markdown("<h1 style='text-align: center;'>🎓</h1>", unsafe_allow_html=True)
 st.sidebar.markdown("<h3 style='text-align: center;'>브니엘고 AI 평가 시스템</h3>", unsafe_allow_html=True)
+
+# 4-0-2. 전체 선택 초기화 버튼 (테스트/재접속 없이도 즉시 빈 상태로 되돌릴 수 있게)
+if st.sidebar.button("🔄 선택 초기화 (기본 상태로)", use_container_width=True, key="reset_all_btn"):
+    st.session_state["feedback_category_select"] = CATEGORY_PLACEHOLDER
+    st.session_state["teacher_detail_radio"] = DETAIL_PLACEHOLDER
+    st.rerun()
+
 st.sidebar.divider()
 
 # 4-1. 입학사정관 선택 (요구사항 1)
@@ -110,17 +136,17 @@ evaluator_mode = st.sidebar.radio(
 
 st.sidebar.divider()
 
-# 4-2. 피드백 버전 선택 (요구사항 9 - 초기 진입 시 미선택 상태 고정)
+# 4-2. 피드백 버전 선택 (요구사항 9 - 상태 고정 및 자동선택 방지 완벽 처리)
 st.sidebar.markdown("### 📝 2. 평가 및 피드백 버전 선택")
 feedback_category = st.sidebar.selectbox(
     "피드백 대분류를 선택하세요 (필수)",
     [
-        "--- 피드백 대분류 선택 ---",
+        CATEGORY_PLACEHOLDER,
         "교사전용 피드백 버전",
         "학생용 피드백 버전"
     ],
-    index=0,
-    key="feedback_category_select"
+    key="feedback_category_select",
+    on_change=_reset_detail_selection
 )
 
 selected_feedback_type = "미선택"
@@ -129,19 +155,24 @@ if feedback_category == "교사전용 피드백 버전":
     selected_feedback_type = st.sidebar.radio(
         "세부 평가 영역 선택 (필수)",
         [
-            "--- 세부 영역 선택 ---",
-            "과목세부능력 특기사항 전용 피드백",
+            DETAIL_PLACEHOLDER,
+            SETUK_LABEL,
             "동아리 특기사항 전용 피드백",
             "자율 및 진로 특기사항 전용 피드백",
             "행동발달특기사항 전용 피드백",
             "생기부 종합 전용 피드백"
         ],
-        index=0,
         key="teacher_detail_radio"
     )
 elif feedback_category == "학생용 피드백 버전":
-    selected_feedback_type = "학생전용 피드백"
+    selected_feedback_type = STUDENT_LABEL
     st.sidebar.info("🎓 학생 1인에 대한 냉정한 현위치 진단, 강점/약점 분석 및 앞으로의 탐구 솔루션을 제공합니다.")
+else:
+    # 대분류가 placeholder(미선택) 상태면 세부 선택값도 항상 placeholder로 강제 고정
+    selected_feedback_type = "미선택"
+    st.session_state["teacher_detail_radio"] = DETAIL_PLACEHOLDER
+
+selected_feedback_type = (selected_feedback_type or "").strip()
 
 st.sidebar.divider()
 
@@ -218,12 +249,12 @@ st.markdown(f"**현재 관점:** `{evaluator_mode}` | **선택된 피드백 모�
 
 st.markdown("### 📋 AI 실시간 통합 채점 기준표 (메인 상시 노출)")
 
-# 📌 [경로 A] 피드백 영역 미선택 시
-if "선택" in selected_feedback_type or selected_feedback_type == "미선택":
-    st.warning("👈 **왼쪽 사이드바의 [2. 평가 및 피드백 버전 선택]에서 피드백 대분류와 세부 평가 영역을 먼저 선택해 주세요.**")
+# 📌 [경로 A] 피드백 영역 미선택 시 (백그라운드 API 호출 전면 제거 -> 0.001초 로딩)
+if selected_feedback_type == "미선택" or "선택" in selected_feedback_type:
+    st.warning("👈 **왼쪽 사이드바의 [2. 평가 및 피드백 버전 선택]에서 원하시는 피드백 대분류 및 세부 평가 영역을 선택해 주세요.**")
 
-# 📌 [경로 B] 과목 세부능력 특기사항 전용 피드백 선택 시 7대 교사 점검 항목 표 노출
-elif selected_feedback_type == "과목세부능력 특기사항 전용 피드백":
+# 📌 [경로 B] 과목 세부능력 특기사항 전용 피드백 선택 시 7대 교사 자가점검 표 즉시 출력
+elif selected_feedback_type == SETUK_LABEL:
     st.info("💡 **과목 세부능력 특기사항 교사 자가점검 7대 핵심 채점기준표 (100점 만점)**")
     st.markdown("""
     <div style="background-color: #F8FAFC; border: 1.5px solid #CBD5E1; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
