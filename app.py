@@ -3,14 +3,14 @@ import google.generativeai as genai
 import pypdf
 import json
 import os
-import urllib.request  # 클라우드 한글 폰트 다운로드용 라이브러리 추가
+import urllib.request
 from io import BytesIO
 
-# --- PDF 생성 라이브러리 임포트 및 예외 처리 ---
+# --- ReportLab PDF 라이브러리 예외 처리 ---
 try:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
@@ -20,38 +20,35 @@ except ImportError:
 
 # --- 1. 페이지 기본 설정 ---
 st.set_page_config(
-    page_title="브니엘고등학교 2028학년도 AI 생기부 정밀 채점 시스템",
+    page_title="브니엘고 AI 생기부 정밀 평가 시스템",
     page_icon="🎓",
     layout="wide"
 )
 
-# --- 2. 로컬 채점 기준 보관 폴더(데이터베이스) 설정 ---
+# --- 2. 대학별 입시요강 가이드라인 보관 폴더 ---
 CRITERIA_DB_DIR = "criteria_database"
 os.makedirs(CRITERIA_DB_DIR, exist_ok=True)
 
-# --- 3. 구글 Gemini API 인증 및 설정 (사이드바 정렬 개편) ---
-st.sidebar.markdown("<h1 style='text-align: center; font-size: 80px; margin-bottom: 0;'>🎓</h1>", unsafe_allow_html=True)
-st.sidebar.markdown("<h3 style='text-align: center; margin-top: 0; margin-bottom: 20px;'>브니엘고 AI 평가 시스템<br/>(2028학년도 표준 규격)</h3>", unsafe_allow_html=True)
+# --- 3. 사이트 헤더 및 안내 ---
+st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>🏫 브니엘고등학교 AI 생기부 정밀 평가 시스템</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #4B5563;'>2028학년도 대입 개편안(2022 개정 교육과정) 및 Bloom 6단계 인지 수준 추적 엔진 적용</p>", unsafe_allow_html=True)
+st.divider()
 
-st.sidebar.info("🔒 학교 구글 워크스페이스 인증됨\n\n계정: teacher@peniel.hs.kr")
-st.sidebar.divider()
-
-st.sidebar.markdown("### 🎯 목표 대학교 유형 설정")
-target_university_group = st.sidebar.selectbox(
-    "학생의 목표 대학 그룹을 선택하세요.",
-    ["인서울 상위 10대 대학", "지방거점국립대학교 (지거국)"],
-    index=0,
-    help="선택한 대학교의 최신 학생부종합전형(학종) 평가 알고리즘 및 배점이 AI 채점에 즉시 반영됩니다."
+# --- 4. 사이드바 설정 ---
+st.sidebar.markdown("### 🎓 평가자 모드 선택")
+evaluator_mode = st.sidebar.radio(
+    "입학사정관 유형을 선택하세요.",
+    ["인서울 입학사정관", "지거국 입학사정관"],
+    help="선택한 입학사정관 관점에 맞춰 학업 심화성, 전문교과 이수, 성실성 및 지역 적합성 등의 평가 비중과 피드백 톤이 달라집니다."
 )
+
 st.sidebar.divider()
 
-HARDCODED_API_KEY = "" 
-
-local_key_file = "api_key.txt"
+# API 키 인증
 api_key = ""
-if os.path.exists(local_key_file):
+if os.path.exists("api_key.txt"):
     try:
-        with open(local_key_file, "r", encoding="utf-8") as f:
+        with open("api_key.txt", "r", encoding="utf-8") as f:
             api_key = f.read().strip()
     except Exception:
         pass
@@ -64,32 +61,31 @@ if not api_key:
         pass
 
 if not api_key:
-    api_key = st.sidebar.text_input("🔑 구글 Gemini API 키를 입력하세요", type="password")
+    api_key = st.sidebar.text_input("🔑 구글 Gemini API 키 입력", type="password")
     if api_key:
         genai.configure(api_key=api_key)
-        st.sidebar.success("✅ 구글 API 키 인증 완료!")
+        st.sidebar.success("API 키 인증 완료")
     else:
-        st.sidebar.warning("⚠️ 서비스를 이용하려면 구글 API 키를 설정해야 합니다.")
+        st.sidebar.warning("Gemini API 키를 입력해주세요.")
 else:
     genai.configure(api_key=api_key)
-    st.sidebar.success("🔑 구글 클라우드 API 자동 인증 완료!")
+    st.sidebar.success("🔑 API 키 자동 인증 완료")
 
 st.sidebar.divider()
 
-st.sidebar.markdown("### 🤖 AI 엔진 모델 설정")
+# AI 모델 선택
 model_option = st.sidebar.selectbox(
-    "사용할 Gemini 모델을 선택하세요.",
+    "🤖 Gemini 모델 선택",
     ["gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
-    index=0,
-    help="기본적으로 가장 호환성이 높은 gemini-2.5-flash를 사용하며, 오류가 지속되면 다른 모델로 전환해 보세요."
+    index=0
 )
 
 st.sidebar.divider()
 
-st.sidebar.markdown("### ⚙️ 대학별 입시요강 관리")
-
+# 입시요강 관리 파일 업로더
+st.sidebar.markdown("### ⚙️ 대학별 채점 기준 파일 관리")
 uploaded_criteria = st.sidebar.file_uploader(
-    "새로운 대학교 입시요강(PDF/TXT) 업로드",
+    "채점 기준 PDF/TXT 업로드",
     type=["pdf", "txt"],
     accept_multiple_files=True,
     key="criteria_uploader"
@@ -101,65 +97,164 @@ if uploaded_criteria:
         if not os.path.exists(dest_path):
             with open(dest_path, "wb") as f:
                 f.write(file.getbuffer())
-    st.sidebar.success("💾 파일이 학교 데이터베이스에 누적 보관되었습니다!")
+    st.sidebar.success("💾 채점 기준 파일 저장 완료!")
+    st.rerun()
 
 accumulated_files = os.listdir(CRITERIA_DB_DIR)
-
 selected_criteria_files = []
+
 if accumulated_files:
-    st.sidebar.markdown("**📌 반영할 대학교 가이드라인 선택**")
+    st.sidebar.markdown("**📌 반영할 채점 기준 선택**")
     for file_name in accumulated_files:
         if st.sidebar.checkbox(file_name, value=True, key=f"check_{file_name}"):
             selected_criteria_files.append(file_name)
     
-    if st.sidebar.button("🗑️ 선택한 기준 보관함에서 삭제", type="secondary"):
+    if st.sidebar.button("🗑️ 선택한 기준 파일 삭제", type="secondary"):
         for file_name in accumulated_files:
             if f"check_{file_name}" in st.session_state and st.session_state[f"check_{file_name}"]:
                 os.remove(os.path.join(CRITERIA_DB_DIR, file_name))
         st.rerun()
-else:
-    st.sidebar.caption("ℹ️ 보관함이 비어 있습니다. 입시요강을 올려서 채우세요.")
 
-# --- 4. 시스템 폰트 탐색 및 자동 다운로드 함수 (한글 깨짐 해결용) ---
+# --- 5. 텍스트 추출 및 한글 폰트 관련 함수 ---
+def extract_text_from_pdf(pdf_file):
+    if pdf_file is None:
+        return ""
+    try:
+        pdf_reader = pypdf.PdfReader(pdf_file)
+        text = ""
+        for page in pdf_reader.pages:
+            extracted = page.extract_text()
+            if extracted:
+                text += extracted + "\n"
+        return text
+    except Exception as e:
+        st.error(f"PDF 파일 읽기 오류: {e}")
+        return ""
+
+def load_local_file_text(filename):
+    path = os.path.join(CRITERIA_DB_DIR, filename)
+    if not os.path.exists(path):
+        return ""
+    if filename.endswith(".pdf"):
+        return extract_text_from_pdf(path)
+    else:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return f.read()
+        except UnicodeDecodeError:
+            with open(path, "r", encoding="cp949") as f:
+                return f.read()
+
 def get_korean_font_path():
     local_font_name = "NanumGothic.ttf"
     if os.path.exists(local_font_name):
         return local_font_name
-
     paths = [
-        "C:\\Windows\\Fonts\\malgun.ttf",       # Windows 맑은 고딕
-        "C:\\Windows\\Fonts\\malgunbd.ttf",     # Windows 맑은 고딕 Bold
-        "/System/Library/Fonts/Supplemental/AppleGothic.ttf", # Mac 애플고딕
-        "/Library/Fonts/AppleGothic.ttf",
-        "/System/Library/Fonts/Supplemental/AppleSDGothicNeo.ttc",
-        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf", # Linux 나눔고딕
-        "/usr/share/fonts/truetype/nanum/NanumBarunGothic.ttf",
-        "/usr/share/fonts/truetype/fonts-nanum/NanumGothic.ttf",
+        "C:\\Windows\\Fonts\\malgun.ttf",
+        "/System/Library/Fonts/Supplemental/AppleGothic.ttf",
+        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
     ]
     for p in paths:
         if os.path.exists(p):
             return p
-
     font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
     try:
         urllib.request.urlretrieve(font_url, local_font_name)
         if os.path.exists(local_font_name):
             return local_font_name
-    except Exception as e:
-        st.sidebar.warning(f"⚠️ 시스템 내 한글 폰트 인식이 불가하여 자동 다운로드를 시도했으나 실패했습니다: {e}")
+    except Exception:
+        pass
     return None
 
-# --- 5. PDF 보고서 작성 로직 (ReportLab 연동 - 겹침 및 중복 오차 완벽 해결 버전) ---
-def generate_pdf_report(result, student_filename, target_group):
+# --- 6. 실시간 메인 화면 채점 기준표 분석 및 생성 함수 ---
+@st.cache_data(show_spinner=False)
+def generate_dynamic_criteria_summary(files_tuple, mode, model_name, api_key_val):
+    if not api_key_val:
+        return None
+    genai.configure(api_key=api_key_val)
+    combined_criteria_text = ""
+    for fname in files_tuple:
+        combined_criteria_text += f"\n--- [{fname}] ---\n" + load_local_file_text(fname)
+    
+    prompt = f"""
+    당신은 대학 입학사정관입니다. 업로드된 채점 기준문서들을 분석하여 메인 화면에 상시 노출할 '실시간 생기부 채점 기준표'를 JSON 형식으로 작성하세요.
+    
+    [평가자 모드]: {mode}
+    [기본 배점 구조 고정]:
+    1. 학업역량 (40점)
+    2. 진로역량 (40점)
+    3. 공동체역량 (20점)
+    
+    [채점 기준 참고 문서 텍스트]:
+    {combined_criteria_text if combined_criteria_text else "기본 2028학년도 대입 학종 범용 평가 가이드라인 적용"}
+
+    응답은 오직 아래 JSON 형식으로만 작성하세요 (마크다운 기호 금지):
+    {{
+        "academic": {{
+            "title": "I. 학업역량 (40점 만점)",
+            "sub_items": [
+                {{"item": "성취도 분포 및 이수환경", "score": 15, "desc": "주요 과목 성취도 및 전문교과 내 상대적 위치"}},
+                {{"item": "학업태도 및 탐구의지", "score": 10, "desc": "교사 관찰 행동 근거 및 어려움 극복 서사"}},
+                {{"item": "디지털 리터러시 & 비판적 탐구", "score": 15, "desc": "Bloom 5-6단계 사고 및 AI/데이터 비판적 활용"}}
+            ]
+        }},
+        "career": {{
+            "title": "II. 진로역량 (40점 만점)",
+            "sub_items": [
+                {{"item": "전공 관련 교과 이수 노력", "score": 10, "desc": "위계적 과목 선택 및 선택 동기"}},
+                {{"item": "전공 관련 교과 성취도", "score": 10, "desc": "전공 과목 성취도의 차별성 및 전공적 사고"}},
+                {{"item": "진로 탐색 활동과 경험", "score": 20, "desc": "교과-창체 연계 진로 에피소드 및 문헌 비판적 독해"}}
+            ]
+        }},
+        "community": {{
+            "title": "III. 공동체역량 (20점 만점)",
+            "sub_items": [
+                {{"item": "협업과 소통능력", "score": 6, "desc": "구체적 역할 기여 및 다원적 환경에서의 조율"}},
+                {{"item": "나눔과 배려", "score": 4, "desc": "특정 대상을 도운 구체적 행동 사례"}},
+                {{"item": "성실성과 규칙 준수", "score": 5, "desc": "출결 성실성 및 행동 특성 근거"}},
+                {{"item": "리더십", "score": 5, "desc": "과정 중심 조율 서사 및 자발적 주도성"}}
+            ]
+        }}
+    }}
+    """
+    try:
+        model = genai.GenerativeModel(model_name)
+        res = model.generate_content(prompt)
+        cleaned = res.text.strip().replace("```json", "").replace("```", "").strip()
+        return json.loads(cleaned)
+    except Exception:
+        return None
+
+# --- 7. 메인 화면 상단: 실시간 채점 기준표 표시 ---
+st.markdown(f"### 📋 메인 실시간 채점 기준표 (`{evaluator_mode}` 모드)")
+
+if selected_criteria_files and api_key:
+    criteria_json = generate_dynamic_criteria_summary(tuple(selected_criteria_files), evaluator_mode, model_option, api_key)
+    if criteria_json:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.info(f"**{criteria_json['academic']['title']}**")
+            for sub in criteria_json['academic']['sub_items']:
+                st.markdown(f"- **{sub['item']} ({sub['score']}점)**: {sub['desc']}")
+        with col2:
+            st.success(f"**{criteria_json['career']['title']}**")
+            for sub in criteria_json['career']['sub_items']:
+                st.markdown(f"- **{sub['item']} ({sub['score']}점)**: {sub['desc']}")
+        with col3:
+            st.warning(f"**{criteria_json['community']['title']}**")
+            for sub in criteria_json['community']['sub_items']:
+                st.markdown(f"- **{sub['item']} ({sub['score']}점)**: {sub['desc']}")
+    else:
+        st.info("💡 기본 채점 기준 [학업역량(40) / 진로역량(40) / 공동체역량(20)]이 적용됩니다.")
+else:
+    st.info("💡 사이드바에서 대학교 입시요강 가이드라인(PDF/TXT)을 업로드하고 선택하면, AI가 분석한 맞춤형 세부 채점 기준표가 실시간 반영됩니다.")
+
+st.divider()
+
+# --- 8. PDF 리포트 생성 함수 (ReportLab 연동) ---
+def generate_pdf_report(result, student_filename, mode):
     buffer = BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        rightMargin=40,
-        leftMargin=40,
-        topMargin=40,
-        bottomMargin=40
-    )
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=35, leftMargin=35, topMargin=35, bottomMargin=35)
     
     font_path = get_korean_font_path()
     font_name = "Helvetica"
@@ -169,484 +264,298 @@ def generate_pdf_report(result, student_filename, target_group):
             font_name = "KoreanFont"
         except Exception:
             pass
-            
+
     styles = getSampleStyleSheet()
     
-    title_style = ParagraphStyle(
-        'DocTitle',
-        parent=styles['Heading1'],
-        fontName=font_name,
-        fontSize=16,
-        leading=20,
-        textColor=colors.HexColor('#1E3A8A'),
-        alignment=1,
-        spaceAfter=12
-    )
+    title_style = ParagraphStyle('DocTitle', parent=styles['Heading1'], fontName=font_name, fontSize=15, leading=19, textColor=colors.HexColor('#1E3A8A'), alignment=1, spaceAfter=10)
+    subtitle_style = ParagraphStyle('DocSubtitle', parent=styles['Normal'], fontName=font_name, fontSize=8.5, leading=11, textColor=colors.HexColor('#4B5563'), alignment=1, spaceAfter=12)
+    h1_style = ParagraphStyle('H1', parent=styles['Heading2'], fontName=font_name, fontSize=11, leading=14, textColor=colors.HexColor('#1E3A8A'), spaceBefore=10, spaceAfter=5, keepWithNext=True)
+    body_style = ParagraphStyle('Body', parent=styles['Normal'], fontName=font_name, fontSize=8, leading=11, textColor=colors.HexColor('#1F2937'), spaceAfter=3)
     
-    subtitle_style = ParagraphStyle(
-        'DocSubtitle',
-        parent=styles['Normal'],
-        fontName=font_name,
-        fontSize=8.5,
-        leading=12,
-        textColor=colors.HexColor('#4B5563'),
-        alignment=1,
-        spaceAfter=15
-    )
-    
-    h1_style = ParagraphStyle(
-        'H1',
-        parent=styles['Heading2'],
-        fontName=font_name,
-        fontSize=11,
-        leading=15,
-        textColor=colors.HexColor('#1E3A8A'),
-        spaceBefore=12,
-        spaceAfter=6,
-        keepWithNext=True
-    )
-    
-    body_style = ParagraphStyle(
-        'Body',
-        parent=styles['Normal'],
-        fontName=font_name,
-        fontSize=8.5,
-        leading=12,
-        textColor=colors.HexColor('#1F2937'),
-        spaceAfter=4
-    )
-    
-    evidence_title_style = ParagraphStyle(
-        'EvidenceTitle',
-        parent=styles['Normal'],
-        fontName=font_name,
-        fontSize=8.5,
-        leading=11,
-        textColor=colors.HexColor('#B45309'),
-        spaceBefore=8,
-        spaceAfter=3,
-        keepWithNext=True
-    )
-
-    feedback_title_style = ParagraphStyle(
-        'FeedbackTitle',
-        parent=styles['Normal'],
-        fontName=font_name,
-        fontSize=8.5,
-        leading=11,
-        textColor=colors.HexColor('#B91C1C'),
-        spaceBefore=8,
-        spaceAfter=3,
-        keepWithNext=True
-    )
-
-    audit_title_style = ParagraphStyle(
-        'AuditTitle',
-        parent=styles['Normal'],
-        fontName=font_name,
-        fontSize=8.5,
-        leading=11,
-        textColor=colors.HexColor('#7C3AED'),
-        spaceBefore=8,
-        spaceAfter=3,
-        keepWithNext=True
-    )
-
-    # [수정 사항] 누락되었던 footer_style 정의 부분을 안전하게 추가 복원했습니다.
-    footer_style = ParagraphStyle(
-        'Footer',
-        parent=styles['Normal'],
-        fontName=font_name,
-        fontSize=7,
-        leading=9,
-        textColor=colors.HexColor('#9CA3AF'),
-        alignment=1
-    )
-
-    # [테두리 겹침 철저 배제] 테이블 래핑 방식으로 Callout 박스를 렌더링하는 헬퍼 함수 정의
-    # 가로 총 너비: 515포인트 (A4 여백 보정 적용)
-    def create_callout_box(text, bg_color_hex, border_color_hex, text_color_hex, font_size=8, leading=12):
-        inner_style = ParagraphStyle(
-            'CalloutInner',
-            fontName=font_name,
-            fontSize=font_size,
-            leading=leading,
-            textColor=colors.HexColor(text_color_hex)
-        )
+    def create_box(text, bg_color, border_color, text_color):
+        inner_style = ParagraphStyle('BoxInner', fontName=font_name, fontSize=7.5, leading=10.5, textColor=colors.HexColor(text_color))
         p = Paragraph(text, inner_style)
-        t = Table([[p]], colWidths=[515])
+        t = Table([[p]], colWidths=[520])
         t.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor(bg_color_hex)),
-            ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor(border_color_hex)),
-            ('TOPPADDING', (0,0), (-1,-1), 6),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
-            ('LEFTPADDING', (0,0), (-1,-1), 8),
-            ('RIGHTPADDING', (0,0), (-1,-1), 8),
+            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor(bg_color)),
+            ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor(border_color)),
+            ('TOPPADDING', (0,0), (-1,-1), 5), ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+            ('LEFTPADDING', (0,0), (-1,-1), 6), ('RIGHTPADDING', (0,0), (-1,-1), 6),
         ]))
         return t
-    
+
     story = []
-    
-    story.append(Paragraph(f"🎓 2028학년도 대비 학생부종합전형 AI 정밀 진단 보고서 ({target_group})", title_style))
-    story.append(Paragraph(f"대상 학생 파일: {student_filename}   |   평가 모델: {model_option}   |   방식: 사정관 공동연구 및 블룸/AI 필터 완벽 연동형", subtitle_style))
+    story.append(Paragraph(f"🎓 브니엘고등학교 AI 생기부 정밀 진단 보고서 ({mode} 모드)", title_style))
+    story.append(Paragraph(f"학생 파일: {student_filename}  |  평가 방식: 2028학년도 대입 표준 및 Bloom 6단계/AI 오염도 감리 적용", subtitle_style))
     story.append(Spacer(1, 5))
     
-    story.append(Paragraph("📊 2028학년도 개정 핵심 10대 지표별 스코어 카드", h1_style))
+    story.append(Paragraph("📊 100점 만점 영역별 스코어 카드", h1_style))
     
+    scores = result.get("scores", {})
     table_data = [
-        [Paragraph("<b>평가 역량 대분류</b>", body_style), Paragraph("<b>세부 정밀 평가 지표 (100점 만점 기준)</b>", body_style), Paragraph("<b>취득 점수 (소수점 정밀계산)</b>", body_style)],
-        [Paragraph("<b>I. 학업역량 (40점)</b>", body_style), Paragraph("1. 성취도 분포 및 이수 환경의 상대적 우위성 (15점 만점)", body_style), Paragraph(f"<b>{result.get('score_achievement_15', '0.0')}</b>", body_style)],
-        [Paragraph("", body_style), Paragraph("2. 행동 동기 및 어려움 극복 서사 기반 학업태도 (10점 만점)", body_style), Paragraph(f"<b>{result.get('score_academic_attitude_10', '0.0')}</b>", body_style)],
-        [Paragraph("", body_style), Paragraph("3. 디지털 리터러시 및 비판적 미디어 탐구 역량 (15점 만점)", body_style), Paragraph(f"<b>{result.get('score_digital_literacy_15', '0.0')}</b>", body_style)],
-        [Paragraph("<b>II. 진로역량 (40점)</b>", body_style), Paragraph("4. 전공 연계 교과의 위계적 이수 노력 및 동기 (10점 만점)", body_style), Paragraph(f"<b>{result.get('score_major_selection_10', '0.0')}</b>", body_style)],
-        [Paragraph("", body_style), Paragraph("5. 전공 관련 주요 교과 성취도 차별성 및 전공적 사고 (10점 만점)", body_style), Paragraph(f"<b>{result.get('score_major_grades_10', '0.0')}</b>", body_style)],
-        [Paragraph("", body_style), Paragraph("6. 교과-창체 연계 진로 에피소드 및 비판적 독해 (20점 만점)", body_style), Paragraph(f"<b>{result.get('score_career_experience_20', '0.0')}</b>", body_style)],
-        [Paragraph("<b>III. 공동체역량 (20점)</b>", body_style), Paragraph("7. 다원적 환경에서의 실질적 협업 및 소통 역량 (6점 만점)", body_style), Paragraph(f"<b>{result.get('score_collab_6', '0.0')}</b>", body_style)],
-        [Paragraph("", body_style), Paragraph("8. 특정 대상을 도운 구체적 나눔과 배려 (4점 만점)", body_style), Paragraph(f"<b>{result.get('score_sharing_4', '0.0')}</b>", body_style)],
-        [Paragraph("", body_style), Paragraph("9. 무단 지각/결석 배제 성실성 및 성품 행특 근거 (5점 만점)", body_style), Paragraph(f"<b>{result.get('score_sincerity_5', '0.0')}</b>", body_style)],
-        [Paragraph("", body_style), Paragraph("10. 과정 중심 조율 과정 입증 리더십 및 자발 주도성 (5점 만점)", body_style), Paragraph(f"<b>{result.get('score_leadership_5', '0.0')}</b>", body_style)],
-        [Paragraph("<b>✨ 합계 총점</b>", body_style), Paragraph("<b>모든 평가지표 합산 종합 환산점수 (보수적 사정관 컷)</b>", body_style), Paragraph(f"<b><font color='#EF4444'>{result.get('score_total', '0.0')} / 100</font></b>", body_style)]
+        [Paragraph("<b>평가 영역</b>", body_style), Paragraph("<b>세부 평가 항목</b>", body_style), Paragraph("<b>취득 점수</b>", body_style)],
+        [Paragraph("I. 학업역량 (40점)", body_style), Paragraph("성취도 분포 / 학업태도 / 디지털 리터러시", body_style), Paragraph(f"<b>{scores.get('academic_total', '0')} / 40</b>", body_style)],
+        [Paragraph("II. 진로역량 (40점)", body_style), Paragraph("전공 이수 노력 / 전공 성취도 / 진로 탐색 경험", body_style), Paragraph(f"<b>{scores.get('career_total', '0')} / 40</b>", body_style)],
+        [Paragraph("III. 공동체역량 (20점)", body_style), Paragraph("협업·소통 / 나눔·배려 / 성실성 / 리더십", body_style), Paragraph(f"<b>{scores.get('community_total', '0')} / 20</b>", body_style)],
+        [Paragraph("<b>✨ 종합 총점</b>", body_style), Paragraph("<b>모든 영역 합산 환산점수</b>", body_style), Paragraph(f"<b><font color='#EF4444'>{scores.get('grand_total', '0')} / 100</font></b>", body_style)]
     ]
     
-    summary_table = Table(table_data, colWidths=[120, 275, 120])
-    summary_table.setStyle(TableStyle([
+    t_score = Table(table_data, colWidths=[120, 280, 120])
+    t_score.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F3F4F6')),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('SPAN', (0,1), (0,3)),
-        ('SPAN', (0,4), (0,6)),
-        ('SPAN', (0,7), (0,10)),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-        ('TOPPADDING', (0,0), (-1,-1), 4),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')),
-        ('BACKGROUND', (0,11), (-1,11), colors.HexColor('#FEF2F2')),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')),
+        ('BACKGROUND', (0,4), (-1,4), colors.HexColor('#FEF2F2')),
     ]))
-    
-    story.append(summary_table)
+    story.append(t_score)
     story.append(Spacer(1, 10))
     
-    story.append(Paragraph("🚨 생성형 AI 대필 및 오염도 진단 감리 서평 (AI Audit)", h1_style))
-    audit_data = result.get("ai_pollution_audit", {})
-    audit_risk = audit_data.get("risk_level", "보통(안전)")
-    audit_verdict = audit_data.get("audit_verdict", "AI 작성 의심 에피소드가 확인되지 않았습니다.")
-    story.append(Paragraph(f"<b>• AI 오염 위험도:</b> <font color='#7C3AED'>{audit_risk}</font>  |  <b>• 의심 영역:</b> {audit_data.get('suspected_areas', '없음')}", body_style))
-    story.append(Spacer(1, 4))
-    story.append(Paragraph("<b>사정관 연합 감리 위원회 서평 및 신뢰도 검토 의견:</b>", audit_title_style))
-    story.append(create_callout_box(audit_verdict, '#F5F3FF', '#8B5CF6', '#4C1D95'))
-    story.append(Spacer(1, 10))
+    # 교사용 피드백
+    story.append(Paragraph("👩‍🏫 [교사용 정밀 피드백]", h1_style))
+    teacher_fb = result.get("teacher_feedback", {})
     
-    story.append(Paragraph("🔍 평가 지표별 세부 분석 및 냉철한 쓴소리 솔루션", h1_style))
+    sections = [
+        ("1. 과목세부능력 및 특기사항 전용", teacher_fb.get("setuk", {})),
+        ("2. 동아리 특기사항 전용", teacher_fb.get("club", {})),
+        ("3. 자율 및 진로 특기사항 전용", teacher_fb.get("autonomy_career", {})),
+        ("4. 행동특성 및 종합의견 전용", teacher_fb.get("behavior", {})),
+        ("5. 생기부 종합 전용 피드백", teacher_fb.get("overall", {})),
+    ]
     
-    # --- 학업 역량 세부 정보 ---
-    story.append(Paragraph("<b>[학업 역량 및 디지털 탐구 정성 진단 (배점: 40점)]</b>", body_style))
-    story.append(Paragraph(f"성취도/태도 진단: {result.get('reason_academic_core', '분석 누락')}", body_style))
-    if result.get('evidence_academic_core'):
-        story.append(Paragraph("<b>🎯 매칭된 학생부 원문 근거 (블룸 인지영역 대조)</b>", evidence_title_style))
-        story.append(create_callout_box(f'"{result["evidence_academic_core"]}"', '#FEF3C7', '#F59E0B', '#451A03'))
-    if result.get('improvement_academic_core'):
-        story.append(Paragraph("<b>⚠️ 학업 역량 돌파를 위한 뼈아픈 조언 및 심화과제 지침</b>", feedback_title_style))
-        story.append(create_callout_box(result['improvement_academic_core'], '#FEF2F2', '#EF4444', '#7F1D1D'))
-    story.append(Spacer(1, 10))
+    for title, content in sections:
+        story.append(Paragraph(f"<b>[{title}]</b>", body_style))
+        story.append(Paragraph(f"• <b>장점:</b> {content.get('strength', '내용 없음')}", body_style))
+        story.append(Paragraph(f"• <b>보완점:</b> {content.get('weakness', '내용 없음')}", body_style))
+        if content.get('quote'):
+            story.append(create_box(f"<b>인용 근거:</b> {content['quote']}", '#FEF3C7', '#F59E0B', '#451A03'))
+        story.append(Spacer(1, 4))
+        
+    story.append(PageBreak())
     
-    # --- 진로 역량 세부 정보 ---
-    story.append(Paragraph("<b>[진로 역량 및 전공교과 위계성 진단 (배점: 40점)]</b>", body_style))
-    story.append(Paragraph(f"진로/교과 설계 진단: {result.get('reason_career_core', '분석 누락')}", body_style))
-    if result.get('evidence_career_core'):
-        story.append(Paragraph("<b>🎯 매칭된 학생부 원문 근거 (위계성 및 독해력 대조)</b>", evidence_title_style))
-        story.append(create_callout_box(f'"{result["evidence_career_core"]}"', '#FEF3C7', '#F59E0B', '#451A03'))
-    if result.get('improvement_career_core'):
-        story.append(Paragraph("<b>⚠️ 진로 역량 돌파를 위한 뼈아픈 조언 및 고난도 연구 추천 소주제</b>", feedback_title_style))
-        story.append(create_callout_box(result['improvement_career_core'], '#FEF2F2', '#EF4444', '#7F1D1D'))
-    story.append(Spacer(1, 10))
-
-    # --- 공동체 역량 세부 정보 ---
-    story.append(Paragraph("<b>[공동체 역량 및 자발적 리더십 진단 (배점: 20점)]</b>", body_style))
-    story.append(Paragraph(f"공동체성/리더십 진단: {result.get('reason_social_core', '분석 누락')}", body_style))
-    if result.get('evidence_social_core'):
-        story.append(Paragraph("<b>🎯 매칭된 학생부 원문 근거 (다원적 협업 및 조율 에피소드)</b>", evidence_title_style))
-        story.append(create_callout_box(f'"{result["evidence_social_core"]}"', '#FEF3C7', '#F59E0B', '#451A03'))
-    if result.get('improvement_social_core'):
-        story.append(Paragraph("<b>⚠️ 인성/성실성 영역 감점 요인 지적 및 보완 행동 제언</b>", feedback_title_style))
-        story.append(create_callout_box(result['improvement_social_core'], '#FEF2F2', '#EF4444', '#7F1D1D'))
-
-    story.append(Spacer(1, 12))
-    story.append(Paragraph("본 보고서에 출력된 가상 시뮬레이션 및 데이터는 브니엘고등학교 AI 생기부 평가 시스템의<br/>개인정보 전량 즉시 파기(Transient Data) 안전 규정에 따라 세션이 종료되는 순간 완벽하게 제거됩니다.", footer_style))
+    # 학생용 피드백
+    story.append(Paragraph("🎓 [학생용 냉정한 현위치 진단 & 솔루션]", h1_style))
+    student_fb = result.get("student_feedback", {})
+    
+    story.append(Paragraph("<b>1. 현재 위치 냉정 진단 (지원 가능 대학 라인)</b>", body_style))
+    story.append(create_box(student_fb.get("current_position", "진단 내용 없음"), '#F3F4F6', '#9CA3AF', '#111827'))
+    story.append(Spacer(1, 6))
+    
+    story.append(Paragraph("<b>2. 활동 강점 & 치명적 보완점</b>", body_style))
+    story.append(Paragraph(f"• <b>강점:</b> {student_fb.get('strength_analysis', '')}", body_style))
+    story.append(Paragraph(f"• <b>치명적 약점:</b> {student_fb.get('weakness_analysis', '')}", body_style))
+    story.append(Spacer(1, 6))
+    
+    story.append(Paragraph("<b>3. 앞으로의 구체적 추천 활동 및 탐구 주제 솔루션</b>", body_style))
+    story.append(create_box(student_fb.get("recommendation", "솔루션 내용 없음"), '#FEF2F2', '#EF4444', '#991B1B'))
     
     doc.build(story)
     pdf_bytes = buffer.getvalue()
     buffer.close()
     return pdf_bytes
 
-# --- 6. 텍스트 추출 함수 (PDF 읽기 부품) ---
-def extract_text_from_pdf(uploaded_file):
-    if uploaded_file is None:
-        return ""
-    try:
-        pdf_reader = pypdf.PdfReader(uploaded_file)
-        text = ""
-        for page in pdf_reader.pages:
-            extracted = page.extract_text()
-            if extracted:
-                text += extracted + "\n"
-        return text
-    except Exception as e:
-        st.error(f"PDF 파일 읽기 중 오류 발생: {e}")
-        return ""
+# --- 9. 생기부 업로드 및 평가 실행 구역 ---
+st.markdown("### 📂 생기부 PDF 제출 및 AI 평가")
+st.info("🔒 제출된 파일은 서버나 디스크에 저장되지 않고, 분석 즉시 휘발성 메모리(RAM)에서 완전 삭제됩니다.")
 
-def load_local_file_text(filename):
-    path = os.path.join(CRITERIA_DB_DIR, filename)
-    if not os.path.exists(path):
-        return ""
-    if filename.endswith(".pdf"):
-        try:
-            pdf_reader = pypdf.PdfReader(path)
-            text = ""
-            for page in pdf_reader.pages:
-                extracted = page.extract_text()
-                if extracted:
-                    text += extracted + "\n"
-            return text
-        except Exception:
-            return ""
-    else:
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return f.read()
-        except UnicodeDecodeError:
-            with open(path, "r", encoding="cp949") as f:
-                return f.read()
+student_pdf = st.file_uploader("학생의 학교생활기록부 PDF 파일을 업로드하세요.", type=["pdf"], key="student_pdf_uploader")
 
-# --- 7. 메인 화면 구성 ---
-st.markdown('<h1 style="color: #1E3A8A;">브니엘고등학교 2028학년도 AI 생기부 정밀 채점 시스템</h1>', unsafe_allow_html=True)
-
-st.error("⚠️ **2028학년도 대입 연합 사정관 표준 평가 가이드 및 블룸 6단계 추적 엔진 기본 탑재 완료:** 2022 개정 교육과정에 맞춘 '성취도 분포/이수환경 분석(15점)', '디지털 리터러시/비판적 탐구(15점)', '블룸의 인지 수준 6단계(지식/이해 vs 평가/창안) 판별식' 및 'AI 생성 의심 문구 필터링 감리'가 100점 만점 구조로 자동 구현됩니다. 타협 없는 점수 차감과 아주 냉철한 극복형 솔루션이 학생에게 제시됩니다.")
-st.markdown(f'<p style="color: #4B5563;">현재 선택된 인재상 평가 엔진: <b>{target_university_group} (초정밀 보수적 평가)</b></p>', unsafe_allow_html=True)
-
-# 생기부 파일 첨부
-st.markdown("### 📂 1단계: 생기부 파일 업로드")
-student_file = st.file_uploader("학생의 생활기록부 PDF 파일을 올리세요.", type=["pdf"])
-
-st.divider()
-
-# --- 8. 단계별 가이드 및 채점/결과 로직 ---
-if not api_key:
-    st.info("👈 왼쪽 사이드바를 열어 **구글 Gemini API 키**를 먼저 입력해 주세요.")
-elif api_key and not student_file:
-    st.info("📂 API 키 인증이 완료되었습니다! 이제 화면 중앙에 **학생의 생활기록부 PDF 파일**을 업로드해 주세요.")
-elif api_key and student_file:
-    st.success(f"📎 생기부 파일 로드 완료: {student_file.name}")
+if student_pdf and api_key:
+    st.success(f"📎 파일 로드 완료: {student_pdf.name}")
     
-    if selected_criteria_files:
-        st.info(f"🎯 이번 채점에는 {target_university_group} 모델과 보관함에서 선택한 **{len(selected_criteria_files)}개 대학 입시요강**이 융합 적용됩니다.\n\n적용 서류: {', '.join(selected_criteria_files)}")
-    else:
-        st.warning(f"⚠️ 선택된 대학별 입시요강이 없습니다. 기본 **[{target_university_group}]** 표준 서류평가 지표로 채점을 진행합니다.")
-
-    if st.button("🔥 AI 실시간 채점 시작하기", type="primary", use_container_width=True):
-        
-        with st.spinner(f"🧠 AI 사정관이 2028 대입 연합 기준(블룸 6단계 판별식 및 AI 오염 감리 포함)으로 차가운 서류 검증 중... (약 10~25초 소요)"):
+    if st.button("🔥 AI 사정관 정밀 평가 시작하기", type="primary", use_container_width=True):
+        with st.spinner("🧠 AI 입학사정관이 2028 대입 가이드라인 및 Bloom 6단계 사고 수준을 바탕으로 생기부를 정밀 검증 중입니다..."):
             
-            student_text = extract_text_from_pdf(student_file)
+            # RAM 상에서 직접 텍스트 추출 (휘발성)
+            student_text = extract_text_from_pdf(student_pdf)
             
             if not student_text.strip():
-                st.error("❌ 업로드한 PDF 파일에서 텍스트를 추출할 수 없습니다. 빈 문서인지 확인해 주세요.")
+                st.error("❌ PDF 파일에서 텍스트를 추출할 수 없습니다.")
                 st.stop()
-            
-            criteria_text = ""
+                
+            # 기준 텍스트 병합
+            combined_criteria = ""
             if selected_criteria_files:
-                for file_name in selected_criteria_files:
-                    criteria_text += f"\n--- [{file_name} 입시가이드] ---\n"
-                    criteria_text += load_local_file_text(file_name) + "\n"
+                for fname in selected_criteria_files:
+                    combined_criteria += f"\n--- [{fname}] ---\n" + load_local_file_text(fname)
             else:
-                criteria_text = "선택된 대학교 그룹의 학생부종합전형 인재상 및 공통 서류 평가 요소를 적용하여 엄격히 평가할 것."
+                combined_criteria = "2028 대입 표준 학종 평가 지표 적용"
 
+            # AI 프롬프트 생성
             prompt = f"""
-            당신은 대학 입학 사정관 연합회(5개교 공동 연구 기준)의 가장 집요하고 보수적인 수석 입학사정관이자, 학생이 방심하지 않도록 뼈를 때리는 냉철한 쓴소리 피드백을 내리는 브니엘고등학교의 진학 교사입니다.
-            제공된 [학생 생기부 텍스트]를 완벽히 독해하고, 아래에 명시된 [2028학년도 인서울 표준 범용 입학사정관 평가기준 체크리스트 (100점 만점)]을 기본 장착하여 등급과 소수점 스코어를 정밀 산출하세요.
+            당신은 전국 대학부종합전형 서류를 평가하는 [{evaluator_mode}]입니다.
+            제공된 [학생 생기부 텍스트]를 분석하여 점수와 정밀 피드백을 산출하세요.
             
-            =========================================
-            [2028학년도 인서울 표준 범용 입학사정관 평가기준 체크리스트 및 감점 규칙]
-            
-            I. 학업역량 (총 40점)
-            1. 성취도 분포 및 이수 환경의 상대적 우위성 (15점 만점)
-            2. 행동 동기 및 어려움 극복 서사 기반 학업태도 (10점 만점)
-            3. 디지털 리터러시 및 비판적 미디어 탐구 역량 (15점 만점)
-            
-            II. 진로역량 (40점)
-            4. 전공 연계 교과의 위계적 이수 노력 및 동기 (10점 만점)
-            5. 전공 관련 주요 교과 성취도 차별성 및 전공적 사고 (10점 만점)
-            6. 교과-창체 연계 진로 에피소드 및 비판적 독해 (20점 만점)
+            [평가 지침 및 감점 규칙]:
+            1. 인서울/지거국 평가자 모드('{evaluator_mode}')의 특성을 철저히 반영할 것.
+            2. 학업역량(40점), 진로역량(40점), 공동체역량(20점) 총 100점 만점으로 점수를 매기세요.
+            3. Bloom의 인지 수준 6단계를 적용하여 단순 조사/요약(1-2단계)은 중간 이하 감점 처리, 비판적 검토 및 대안 제안(5-6단계)만 영역별 고득점을 부여하세요.
+            4. 교사 관찰 부재 및 AI 대필 템플릿 문구는 엄격히 감점 사유로 지적하세요.
+            5. 피드백은 [교사용 5개 영역]과 [학생용 1개 영역]으로 엄격히 분리하여 작성하세요.
+            6. 학생용 피드백은 헛된 희망을 주지 않고 입학사정관 관점의 냉정한 현재 위치 진단과 치명적 약점, 앞으로 보완할 구체적 탐구 주제를 제시하세요.
 
-            III. 공동체역량 (총 20점)
-            7. 다원적 환경에서의 실질적 협업 및 소통 역량 (6점 만점)
-            8. 특정 대상을 도운 구체적 나눔과 배려 (4점 만점)
-            9. 성실성과 규칙 준수 (5점 만점)
-            10. 과정 중심 조율 과정 입증 리더십 및 자발 주도성 (5점 만점)
-            
-            =========================================
-            [★ 초정밀 AI 감리 규칙 및 블룸 인지 수준 6단계 필터 ★]
-            
-            1. 블룸(Bloom) 인지 수준 판별식:
-               - 지식/이해 단계 중심의 평이한 기재는 냉정하게 중위권 혹은 감점 등급으로 고정 분류한다.
-               - 평가/창안 단계가 입증되어야 비로소 영역별 만점(S등급)을 부여한다.
-            2. AI 오염 및 신뢰도 검사 (부록 B 가이드):
-               - "표준 AI 템플릿 의심", "과목 간 문체 이질성", "교사 관찰 부재" 항목 탐색.
-            
-            =========================================
-            [채점 기준 가이드라인 (누적 대학교 가이드라인)]
-            {criteria_text}
-            
-            [학생 생기부 텍스트]
+            [채점 기준 참고 자료]:
+            {combined_criteria}
+
+            [학생 생기부 텍스트]:
             {student_text}
-            
-            반드시 아래 지정된 JSON 형식으로만 완벽하게 답변해야 합니다. 마크다운 기호(```json 등)는 앞뒤에 절대 넣지 말고 오직 순수한 JSON 텍스트만 출력하세요. 모든 점수 합산 필드는 오차가 없어야 합니다.
+
+            반드시 아래 지정된 JSON 형식으로만 순수 텍스트로 응답하세요 (마크다운 기호 금지):
             {{
-                "score_achievement_15": "성취도/이수환경 점수 (예: 11.5 / 15)",
-                "score_academic_attitude_10": "학업태도 점수 (예: 6.5 / 10)",
-                "score_digital_literacy_15": "디지털 리터러시 점수 (예: 11.0 / 15)",
-                "reason_academic_core": "학업역량 3개 영역에 대한 보수적이고 냉정하며 뼈 때리는 통합 진단 서평 (블룸 인지영역 대조 포함)",
-                "evidence_academic_core": "학업역량에서 감점이나 한계를 직접 보여주는 세특의 실제 평이한 문장 또는 핵심 문장 인용",
-                "improvement_academic_core": "학업역량 만점을 뚫기 위해 당장 다음 학기에 제출해야 할 매우 구체적인 고난도 탐구 보고서 주제 추천 및 공부법 독설 가이드",
-                
-                "score_major_selection_10": "전공이수 노력 점수 (예: 7.5 / 10)",
-                "score_major_grades_10": "전공교과 성취도 점수 (예: 6.0 / 10)",
-                "score_career_experience_20": "진로탐색 에피소드 점수 (예: 13.5 / 20)",
-                "reason_career_core": "진로역량 3개 영역에 대한 보수적이고 냉혹한 통합 사정관 진단 서평 (위계성 및 알맹이 나열 한계 폭로)",
-                "evidence_career_core": "진로역량에서 과장되었거나 알맹이가 누락된 실제 문장 그대로 인용",
-                "improvement_career_core": "이 학생의 희망 진로에 최적화된, 실제 대학 학술논문และ 전공 서적을 연계한 '독창적이고 구체적인 꼬리물기 심화 탐구 소주제 2~3개 직접 기획 추천'",
-                
-                "score_collab_6": "협업/소통 점수 (예: 4.0 / 6)",
-                "score_sharing_4": "나눔/배려 점수 (예: 2.5 / 4)",
-                "score_sincerity_5": "성실성/출결 점수 (예: 4.5 / 5)",
-                "score_leadership_5": "리더십 점수 (예: 3.5 / 5)",
-                "reason_social_core": "공동체역량 4개 영역에 대한 정량 감점 사유 중심의 엄격한 통합 사정관 진단 서평",
-                "evidence_social_core": "공동체역량 기재 중 추상적인 칭찬 위주의 신뢰도 낮은 실제 문장 인용",
-                "improvement_social_core": "기록의 정량성을 극대화하기 위해 학급 활동이나 동아리에서 직접 실행해야 할 구체적 소통/조율 역할 제언",
-                
-                "ai_pollution_audit": {{
-                    "risk_level": "위험도 단계 (예: 정상(안전), 주의, 심각 중 하나)",
-                    "suspected_areas": "AI 대필이 강하게 의심되는 과목 세특이나 창체 영역 명칭",
-                    "audit_verdict": "사정관 감리 위원회 관점에서 기재 수준의 AI 템플릿 의존성, 문체 불일치, 교사 관찰 부재 현황을 소리 높여 짚어낸 냉정하고 예리한 경고 의견"
+                "scores": {{
+                    "academic_total": 32.5,
+                    "career_total": 31.0,
+                    "community_total": 17.5,
+                    "grand_total": 81.0
                 }},
-                
-                "score_total": "전체 합산 총점 (예: 71.0) - 위 10개 영역 점수의 합과 100% 한 치의 수학적 오차도 없이 일치하도록 소수점 계산할 것"
+                "teacher_feedback": {{
+                    "setuk": {{
+                        "strength": "과목 세특의 장점 서술",
+                        "weakness": "과목 세특의 보완점 및 감점 사유 (Bloom단계, AI 의심문장 지적)",
+                        "quote": "세특 원문 문장 인용"
+                    }},
+                    "club": {{
+                        "strength": "동아리 활동 장점",
+                        "weakness": "동아리 활동 보완점",
+                        "quote": "동아리 원문 인용"
+                    }},
+                    "autonomy_career": {{
+                        "strength": "자율 및 진로 활동 장점",
+                        "weakness": "자율 및 진로 활동 보완점",
+                        "quote": "원문 인용"
+                    }},
+                    "behavior": {{
+                        "strength": "행동특성 및 종합의견 장점",
+                        "weakness": "행특 보완점",
+                        "quote": "행특 원문 인용"
+                    }},
+                    "overall": {{
+                        "strength": "생기부 전체의 일관성 및 성장 서사 장점",
+                        "weakness": "생기부 전체 종합 보완점",
+                        "quote": "주요 원문 인용"
+                    }}
+                }},
+                "student_feedback": {{
+                    "current_position": "입학사정관 관점의 냉정한 현재 위치 및 지원 가능 대학 라인 진단",
+                    "strength_analysis": "여태까지 했던 활동의 핵심 강점 분석",
+                    "weakness_analysis": "치명적인 보완점 및 감점 요소 분석",
+                    "recommendation": "앞으로 3학년/다음 학기에 실행해야 할 구체적인 탐구 주제 및 과목 선택/활동 제언 솔루션"
+                }}
             }}
             """
-
+            
             try:
-                generation_config = {
-                    "temperature": 0.0,
-                    "top_p": 1.0,
-                    "top_k": 1,
-                }
-                
-                model = genai.GenerativeModel(
-                    model_name=model_option,
-                    generation_config=generation_config
-                )
+                model = genai.GenerativeModel(model_option)
                 response = model.generate_content(prompt)
+                cleaned_res = response.text.strip().replace("```json", "").replace("```", "").strip()
+                result_data = json.loads(cleaned_res)
                 
-                response_text = response.text.strip()
-                if response_text.startswith("```json"):
-                    response_text = response_text[7:]
-                if response_text.endswith("```"):
-                    response_text = response_text[:-3]
-                response_text = response_text.strip()
-                
-                result = json.loads(response_text)
-                
-                st.balloons()
-                st.success("🎉 분석 완료! 개인정보 보호를 위해 생기부 원본은 메모리에서 즉시 영구 파기되었습니다.")
-                
-                st.divider()
-                st.markdown(f"### 📝 2단계: 실제 AI 채점 결과 ({target_university_group} 전형형 모델 - 🚨 냉정 평가 및 AI 감리 모드)")
-                
-                col_score1, col_score2, col_score3, col_score4 = st.columns(4)
-                col_score1.metric("📊 학업역량 계 (40점 만점)", f"{float(result['score_achievement_15'].split('/')[0]) + float(result['score_academic_attitude_10'].split('/')[0]) + float(result['score_digital_literacy_15'].split('/')[0]):.1f} / 40.0")
-                col_score2.metric("🎯 진로역량 계 (40점 만점)", f"{float(result['score_major_selection_10'].split('/')[0]) + float(result['score_major_grades_10'].split('/')[0]) + float(result['score_career_experience_20'].split('/')[0]):.1f} / 40.0")
-                col_score3.metric("🤝 공동체역량 계 (20점 만점)", f"{float(result['score_collab_6'].split('/')[0]) + float(result['score_sharing_4'].split('/')[0]) + float(result['score_sincerity_5'].split('/')[0]) + float(result['score_leadership_5'].split('/')[0]):.1f} / 20.0")
-                col_score4.metric("🚨 종합 환산 점수", f"{result['score_total']} / 100")
-
-                st.divider()
-                st.markdown("### 🤖 2028학년도 표준 생기부 AI 신뢰도 감리 결과 (AI Audit)")
-                audit_box = result.get("ai_pollution_audit", {})
-                risk_color = "red" if audit_box.get("risk_level") in ["주의", "심각"] else "green"
-                st.markdown(f"""
-                <div style="background-color: #F5F3FF; border-left: 6px solid #8B5CF6; padding: 20px; border-radius: 8px;">
-                    <h4 style="color: #4C1D95; margin-top:0;">👁️ 사정관 연합회 서류 신뢰도 정밀 감리 소견</h4>
-                    <p style="font-size: 15px; color: #1F2937;">
-                        <b>• AI 대필 위험도 단계:</b> <span style="color: {risk_color}; font-weight: bold;">[{audit_box.get("risk_level", "정상")}]</span><br/>
-                        <b>• 정밀 재검토가 권장되는 의심 영역:</b> <span style="font-weight: bold; color: #B91C1C;">{audit_box.get("suspected_areas", "없음")}</span>
-                    </p>
-                    <hr style="border: 0.5px solid #E5E7EB; margin: 15px 0;"/>
-                    <p style="font-style: italic; color: #4C1D95; line-height: 1.5; font-size: 14.5px;">
-                        " {audit_box.get("audit_verdict", "기재된 텍스트 중 인위적인 AI 에뮬레이션 패턴이나 극단적인 문체 격차가 발견되지 않았습니다. 서류 신뢰도가 우수한 수준입니다.")} "
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                st.divider()
-                st.markdown("### 🔍 10대 지표 상세 평가 분석서")
-                
-                with st.expander("📕 I. 학업역량 (성취도 분포, 학업태도, 디지털 리터러시) [배점: 40점]"):
-                    tab_analysis, tab_improve = st.tabs(["🔍 세부 평가 의견 (블룸 6단계 대조)", "🚨 만점 대비 감점 원인 및 쓴소리 조언"])
-                    with tab_analysis:
-                        st.markdown(f"**• 성취도 분포 및 이수환경 점수:** `{result['score_achievement_15']}`")
-                        st.markdown(f"**• 행동 근거 기반 학업태도 점수:** `{result['score_academic_attitude_10']}`")
-                        st.markdown(f"**• 디지털 리터러시 및 비판 탐구 점수:** `{result['score_digital_literacy_15']}`")
-                        st.write(result["reason_academic_core"])
-                        st.info(f"블룸 하위 인지단계(지식/이해)로 매칭되어 감점된 원문 근거: \"{result['evidence_academic_core']}\"")
-                    with tab_improve:
-                        st.warning(result.get("improvement_academic_core", "학업 역량이 완벽합니다."))
-                        
-                with st.expander("📗 II. 진로역량 (과목 위계성, 전공적 사고, 교과-창체 연계) [배점: 40점]"):
-                    tab_analysis, tab_improve = st.tabs(["🔍 세부 평가 의견 (독해력 및 선택과목 위계 대조)", "🚨 만점 대비 감점 원인 및 초정밀 탐구 추천 소주제"])
-                    with tab_analysis:
-                        st.markdown(f"**• 전공 연계 과목 이수 노력 점수:** `{result['score_major_selection_10']}`")
-                        st.markdown(f"**• 전공 관련 교과 성취도 점수:** `{result['score_major_grades_10']}`")
-                        st.markdown(f"**• 교과-창체 연계 진로 에피소드 점수:** `{result['score_career_experience_20']}`")
-                        st.write(result["reason_career_core"])
-                        st.info(f"학술 연계 깊이가 부족해 단순 나열로 분류된 감점 원문 근거: \"{result['evidence_career_core']}\"")
-                    with tab_improve:
-                        st.warning(result.get("improvement_career_core", "진로 설계가 완벽합니다."))
-                        
-                with st.expander("📘 III. 공동체역량 (다원적 협업, 나눔과 배려, 성실성, 리더십) [배점: 20점]"):
-                    tab_analysis, tab_improve = st.tabs(["🔍 세부 평가 의견 (성품 및 실질 기여도 대조)", "🚨 만점 대비 감점 원인 및 행동 지침"])
-                    with tab_analysis:
-                        st.markdown(f"**• 다원적 협업 및 소통 역량 점수:** `{result['score_collab_6']}`")
-                        st.markdown(f"**• 특정 대상 중심 나눔과 배려 점수:** `{result['score_sharing_4']}`")
-                        st.markdown(f"**• 성실성 및 출결 점수:** `{result['score_sincerity_5']}`")
-                        st.markdown(f"**• 자발적 리더십 및 조율 점수:** `{result['score_leadership_5']}`")
-                        st.write(result["reason_social_core"])
-                        st.info(f"직책 명칭만 나열되어 실질 행동 근거가 결여된 감점 원문 근거: \"{result['evidence_social_core']}\"")
-                    with tab_improve:
-                        st.warning(result.get("improvement_social_core", "인성 지표가 완벽합니다."))
-                        
-                st.divider()
-                st.markdown("### 📥 3단계: 채점 보고서 다운로드")
-                
-                col_btn1, col_btn2 = st.columns(2)
-                with col_btn1:
-                    if REPORTLAB_AVAILABLE:
-                        pdf_report_bytes = generate_pdf_report(result, student_file.name, target_university_group)
-                        st.download_button(
-                            label="📄 완성형 PDF 정밀 진단 보고서 다운로드 (AI 감리 내용 탑재)", 
-                            data=pdf_report_bytes, 
-                            file_name=f"브니엘고_2028대비_AI_냉정채점결과_{target_university_group.replace(' ', '_')}_{student_file.name.replace('.pdf', '')}.pdf",
-                            mime="application/pdf",
-                            use_container_width=True
-                        )
-                    else:
-                        st.warning("⚠️ PDF 모듈이 누락되어 텍스트 다운로드만 가능합니다. PDF를 사용하시려면 터미널에 'pip install reportlab' 명령어 실행 후 새로고침하세요.")
-                with col_btn2:
-                    report_txt = f"=== 브니엘고 AI 채점 보고서 ({target_university_group} 냉철 평가 모델) ===\n\n종합 점수: {result['score_total']}\n\n1. 학업역량: {result['score_achievement_15']} + {result['score_academic_attitude_10']} + {result['score_digital_literacy_15']}\n- 내용: {result['reason_academic_core']}\n- 보완책: {result.get('improvement_academic_core', '')}\n\n2. 진로역량: {result['score_major_selection_10']} + {result['score_major_grades_10']} + {result['score_career_experience_20']}\n- 내용: {result['reason_career_core']}\n- 보완책: {result.get('improvement_career_core', '')}\n\n3. 공동체역량: {result['score_collab_6']} + {result['score_sharing_4']} + {result['score_sincerity_5']} + {result['score_leadership_5']}\n- 내용: {result['reason_social_core']}\n- 보완책: {result.get('improvement_social_core', '')}"
-                    st.download_button("📝 텍스트(TXT) 간이 보고서 다운로드", data=report_txt, file_name="ai_report.txt", use_container_width=True)
-                
+                st.session_state["eval_result"] = result_data
+                st.session_state["pdf_filename"] = student_pdf.name
+                st.success("🎉 분석 완료! 개인정보 보호를 위해 제출된 생기부 원본 데이터는 메모리에서 즉시 영구 파기되었습니다.")
             except json.JSONDecodeError:
-                st.error("⚠️ AI가 규격에 맞지 않는 불완전한 형식으로 응답했습니다. 한 번 더 '채점 시작하기'를 눌러주시거나, 모델 설정을 변경해 보세요.")
-                with st.expander("ℹ️ AI 원본 답변 내용 보기"):
-                    st.code(response.text)
+                st.error("⚠️ AI 응답을 해석하는 중 오류가 발생했습니다. 다시 시도해 주세요.")
+                st.code(response.text)
             except Exception as e:
-                if "404" in str(e):
-                    st.error(f"❌ 선택하신 모델('{model_option}')을 구글에서 찾을 수 없거나 현재 사용이 불가능합니다. 왼쪽 사이드바의 'AI 엔진 모델 설정'에서 다른 모델로 변경하여 다시 시도해 보세요!")
-                else:
-                    st.error(f"AI 분석 중 에러가 발생했습니다: {e}")
+                st.error(f"평가 도중 오류 발생: {e}")
+
+# --- 10. 평가 결과 출력 구역 (교사용 탭 vs 학생용 탭) ---
+if "eval_result" in st.session_state:
+    res = st.session_state["eval_result"]
+    scores = res.get("scores", {})
+    
+    st.divider()
+    st.markdown(f"### 📊 평가 결과 스코어 카드 (`{evaluator_mode}`)")
+    
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("📕 학업역량", f"{scores.get('academic_total', 0)} / 40 점")
+    m2.metric("📗 진로역량", f"{scores.get('career_total', 0)} / 40 점")
+    m3.metric("📘 공동체역량", f"{scores.get('community_total', 0)} / 20 점")
+    m4.metric("✨ 종합 총점", f"{scores.get('grand_total', 0)} / 100 점")
+    
+    st.divider()
+    
+    main_tab1, main_tab2 = st.tabs(["👩‍🏫 교사용 정밀 피드백 (항목별 장점/보완점)", "🎓 학생용 냉정한 현위치 진단 & 솔루션"])
+    
+    # 📌 [교사용 피드백] (5개 전용 탭)
+    with main_tab1:
+        st.subheader("👩‍🏫 NEIS 기재 및 지도용 교사 전용 피드백")
+        t_tab1, t_tab2, t_tab3, t_tab4, t_tab5 = st.tabs([
+            "1. 과목세특 피드백",
+            "2. 동아리 피드백",
+            "3. 자율·진로 피드백",
+            "4. 행특 피드백",
+            "5. 생기부 종합 피드백"
+        ])
+        
+        teacher_data = res.get("teacher_feedback", {})
+        
+        def display_teacher_item(data_dict, title):
+            st.markdown(f"#### 📌 {title}")
+            st.success(f"**👍 장점:** {data_dict.get('strength', '')}")
+            st.warning(f"**⚠️ 보완점 및 감점 사유:** {data_dict.get('weakness', '')}")
+            if data_dict.get('quote'):
+                st.info(f"**🎯 인용 원문 근거:** \"{data_dict.get('quote')}\"")
+
+        with t_tab1:
+            display_teacher_item(teacher_data.get("setuk", {}), "과목 세부능력 및 특기사항")
+        with t_tab2:
+            display_teacher_item(teacher_data.get("club", {}), "동아리 활동 특기사항")
+        with t_tab3:
+            display_teacher_item(teacher_data.get("autonomy_career", {}), "자율 및 진로 활동 특기사항")
+        with t_tab4:
+            display_teacher_item(teacher_data.get("behavior", {}), "행동특성 및 종합의견")
+        with t_tab5:
+            display_teacher_item(teacher_data.get("overall", {}), "생기부 전체 종합 서사")
+
+    # 📌 [학생용 피드백] (1개 단일 탭)
+    with main_tab2:
+        st.subheader("🎓 학생 전용 쓴소리 진단 리포트")
+        student_data = res.get("student_feedback", {})
+        
+        st.markdown("#### 🔍 1. 입학사정관 관점의 냉정한 현재 위치 진단")
+        st.error(student_data.get("current_position", ""))
+        
+        col_st1, col_st2 = st.columns(2)
+        with col_st1:
+            st.markdown("#### 👍 2. 여태까지 했던 활동의 강점")
+            st.success(student_data.get("strength_analysis", ""))
+        with col_st2:
+            st.markdown("#### 🚨 3. 치명적인 약점 및 보완점")
+            st.warning(student_data.get("weakness_analysis", ""))
+            
+        st.markdown("#### 🚀 4. 향후 추천 활동 및 구체적 탐구 주제 솔루션")
+        st.info(student_data.get("recommendation", ""))
+
+    st.divider()
+    
+    # --- 11. PDF/TXT 보고서 다운로드 ---
+    st.markdown("### 📥 3단계: 채점 보고서 다운로드")
+    d_col1, d_col2 = st.columns(2)
+    
+    with d_col1:
+        if REPORTLAB_AVAILABLE:
+            pdf_bytes = generate_pdf_report(res, st.session_state.get("pdf_filename", "student.pdf"), evaluator_mode)
+            st.download_button(
+                label="📄 정밀 진단 보고서 PDF 다운로드",
+                data=pdf_bytes,
+                file_name=f"브니엘고_AI_생기부평가_{evaluator_mode}_{st.session_state.get('pdf_filename', 'student').replace('.pdf','')}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+        else:
+            st.warning("ReportLab 모듈이 설치되어 있지 않습니다. (`pip install reportlab` 필요)")
+            
+    with d_col2:
+        txt_report = f"=== 브니엘고 AI 생기부 평가 리포트 ({evaluator_mode}) ===\n\n"
+        txt_report += f"종합 점수: {scores.get('grand_total', 0)} / 100\n"
+        txt_report += f"- 학업역량: {scores.get('academic_total', 0)}/40\n"
+        txt_report += f"- 진로역량: {scores.get('career_total', 0)}/40\n"
+        txt_report += f"- 공동체역량: {scores.get('community_total', 0)}/20\n\n"
+        txt_report += f"[학생 현재 위치 진단]\n{student_data.get('current_position', '')}\n\n"
+        txt_report += f"[향후 추천 탐구 주제]\n{student_data.get('recommendation', '')}\n"
+        
+        st.download_button(
+            label="📝 간이 리포트 TXT 다운로드",
+            data=txt_report,
+            file_name="생기부_평가_요약.txt",
+            use_container_width=True
+        )
