@@ -110,7 +110,7 @@ evaluator_mode = st.sidebar.radio(
 
 st.sidebar.divider()
 
-# 4-2. 피드백 버전 선택 (요구사항 9 - 상태 고정 및 자동선택 방지 완벽 처리)
+# 4-2. 피드백 버전 선택 (요구사항 9 - 미선택 상태 기본 지정)
 st.sidebar.markdown("### 📝 2. 평가 및 피드백 버전 선택")
 feedback_category = st.sidebar.selectbox(
     "피드백 대분류를 선택하세요 (필수)",
@@ -218,11 +218,11 @@ st.markdown(f"**현재 관점:** `{evaluator_mode}` | **선택된 피드백 모�
 
 st.markdown("### 📋 AI 실시간 통합 채점 기준표 (메인 상시 노출)")
 
-# 📌 [경로 A] 피드백 영역 미선택 시 (백그라운드 API 호출 전면 제거 -> 0.001초 로딩)
+# 📌 [경로 A] 피드백 영역 미선택 시
 if "선택" in selected_feedback_type or selected_feedback_type == "미선택":
     st.warning("👈 **왼쪽 사이드바의 [2. 평가 및 피드백 버전 선택]에서 원하시는 피드백 대분류 및 세부 평가 영역을 선택해 주세요.**")
 
-# 📌 [경로 B] 과목 세부능력 특기사항 전용 피드백 선택 시 7대 교사 자가점검 표 즉시 출력
+# 📌 [경로 B] 과목 세부능력 특기사항 전용 피드백 선택 시 7대 교사 점검 항목 표 노출
 elif selected_feedback_type == "과목세부능력 특기사항 전용 피드백":
     st.info("💡 **과목 세부능력 특기사항 교사 자가점검 7대 핵심 채점기준표 (100점 만점)**")
     st.markdown("""
