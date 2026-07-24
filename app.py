@@ -104,37 +104,40 @@ st.sidebar.markdown("### 🎯 1. 입학사정관 유형 선택")
 evaluator_mode = st.sidebar.radio(
     "사정관 관점을 선택하세요.",
     ["인서울 입학사정관", "지거국 입학사정관"],
-    index=0
+    index=0,
+    key="evaluator_mode_radio"
 )
 
 st.sidebar.divider()
 
-# 4-2. 피드백 버전 선택 (요구사항 9 - 미선택 상태를 기본으로 두어 과세특 자동지정 방지)
+# 4-2. 피드백 버전 선택 (요구사항 9 - 상태 고정 및 자동선택 방지 완벽 처리)
 st.sidebar.markdown("### 📝 2. 평가 및 피드백 버전 선택")
 feedback_category = st.sidebar.selectbox(
     "피드백 대분류를 선택하세요 (필수)",
     [
-        "선택해주세요 (피드백 대분류 미선택)",
+        "--- 피드백 대분류 선택 ---",
         "교사전용 피드백 버전",
         "학생용 피드백 버전"
     ],
-    index=0  # 초기 진입 시 미선택 상태
+    index=0,
+    key="feedback_category_select"
 )
 
-selected_feedback_type = "선택해주세요 (피드백 미선택)"
+selected_feedback_type = "미선택"
 
 if feedback_category == "교사전용 피드백 버전":
     selected_feedback_type = st.sidebar.radio(
         "세부 평가 영역 선택 (필수)",
         [
-            "선택해주세요 (세부 평가 영역 미선택)",
+            "--- 세부 영역 선택 ---",
             "과목세부능력 특기사항 전용 피드백",
             "동아리 특기사항 전용 피드백",
             "자율 및 진로 특기사항 전용 피드백",
             "행동발달특기사항 전용 피드백",
             "생기부 종합 전용 피드백"
         ],
-        index=0  # 초기 진입 시 미선택 상태
+        index=0,
+        key="teacher_detail_radio"
     )
 elif feedback_category == "학생용 피드백 버전":
     selected_feedback_type = "학생전용 피드백"
@@ -155,7 +158,7 @@ if not api_key and "GEMINI_API_KEY" in st.secrets:
     api_key = st.secrets["GEMINI_API_KEY"]
 
 if not api_key:
-    api_key = st.sidebar.text_input("🔑 구글 Gemini API Key 입력", type="password")
+    api_key = st.sidebar.text_input("🔑 구글 Gemini API Key 입력", type="password", key="api_key_input")
     if api_key:
         genai.configure(api_key=api_key)
         st.sidebar.success("✅ 인증 완료!")
@@ -169,7 +172,8 @@ st.sidebar.divider()
 model_option = st.sidebar.selectbox(
     "🤖 Gemini AI 모델 선택",
     ["gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
-    index=0
+    index=0,
+    key="model_option_select"
 )
 
 st.sidebar.divider()
@@ -200,7 +204,7 @@ if accumulated_files:
         if st.sidebar.checkbox(file_name, value=True, key=f"check_{file_name}"):
             selected_criteria_files.append(file_name)
     
-    if st.sidebar.button("🗑️ 선택 파일 DB에서 삭제", type="secondary"):
+    if st.sidebar.button("🗑️ 선택 파일 DB에서 삭제", type="secondary", key="delete_criteria_btn"):
         for file_name in accumulated_files:
             if st.session_state.get(f"check_{file_name}", False):
                 os.remove(os.path.join(CRITERIA_DB_DIR, file_name))
@@ -209,16 +213,16 @@ if accumulated_files:
 # --- 5. 메인 화면 헤더 및 실시간 채점 기준표 노출 ---
 st.title("🏫 브니엘고등학교 AI 생기부 정밀 평가 시스템")
 
-display_mode_str = selected_feedback_type if "미선택" not in selected_feedback_type else "영역 미선택 (좌측 사이드바에서 선택)"
+display_mode_str = selected_feedback_type if "선택" not in selected_feedback_type and selected_feedback_type != "미선택" else "영역 미선택 (좌측 사이드바에서 선택)"
 st.markdown(f"**현재 관점:** `{evaluator_mode}` | **선택된 피드백 모드:** `<font color='#1E3A8A'><b>{display_mode_str}</b></font>` | **적용 기준 파일:** `{len(selected_criteria_files)}개`", unsafe_allow_html=True)
 
 st.markdown("### 📋 AI 실시간 통합 채점 기준표 (메인 상시 노출)")
 
-# 📌 [경로 A] 피드백 영역을 선택하지 않았을 때
-if "미선택" in selected_feedback_type:
-    st.warning("👈 **왼쪽 사이드바의 [2. 평가 및 피드백 버전 선택]에서 원하시는 피드백 버전과 세부 평가 영역을 선택해 주세요.**")
+# 📌 [경로 A] 피드백 영역 미선택 시 (백그라운드 API 호출 전면 제거 -> 0.001초 로딩)
+if "선택" in selected_feedback_type or selected_feedback_type == "미선택":
+    st.warning("👈 **왼쪽 사이드바의 [2. 평가 및 피드백 버전 선택]에서 원하시는 피드백 대분류 및 세부 평가 영역을 선택해 주세요.**")
 
-# 📌 [경로 B] 과목 세부능력 특기사항 전용 피드백 선택 시 7대 교사 점검 항목 표 노출
+# 📌 [경로 B] 과목 세부능력 특기사항 전용 피드백 선택 시 7대 교사 자가점검 표 즉시 출력
 elif selected_feedback_type == "과목세부능력 특기사항 전용 피드백":
     st.info("💡 **과목 세부능력 특기사항 교사 자가점검 7대 핵심 채점기준표 (100점 만점)**")
     st.markdown("""
@@ -338,7 +342,7 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
     story.append(Paragraph(f"대상 파일: {student_filename}  |  평가 모드: {fb_type}", subtitle_style))
     story.append(Spacer(1, 4))
     
-    # 과목 세특 교사 점검 리포트
+    # 1) 과목 세특 교사 점검 리포트
     if fb_type == "과목세부능력 특기사항 전용 피드백" and "setuk_eval" in eval_data:
         st_data = eval_data["setuk_eval"]
         t_scores = st_data.get("scores", {})
@@ -370,7 +374,7 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
         story.append(Spacer(1, 4))
         story.append(create_box(f"<b>✏️ 수정·보완 추천 문장 가이드:</b><br/>{st_data.get('revision_examples', '')}", '#FEF2F2', '#EF4444', '#991B1B'))
 
-    # 표준 생기부 리포트
+    # 2) 표준 생기부 리포트
     else:
         scores = eval_data.get("scores", {})
         table_data = [
@@ -423,10 +427,10 @@ student_file = st.file_uploader("학생부 PDF 업로드", type=["pdf"], key="st
 if student_file and api_key:
     st.success(f"📎 학생부 파일 로드 완료: {student_file.name}")
     
-    if "미선택" in selected_feedback_type:
+    if "선택" in selected_feedback_type or selected_feedback_type == "미선택":
         st.warning("⚠️ 왼쪽 사이드바에서 [피드백 대분류 및 세부 평가 영역]을 먼저 선택해야 AI 평가를 시작할 수 있습니다.")
     else:
-        if st.button("🔥 선택한 버전으로 AI 정밀 평가 시작하기", type="primary", use_container_width=True):
+        if st.button("🔥 선택한 버전으로 AI 정밀 평가 시작하기", type="primary", use_container_width=True, key="start_eval_btn"):
             with st.spinner(f"🧠 AI 사정관이 [{evaluator_mode}] 관점에서 [{selected_feedback_type}] 맞춤 정밀 검증을 진행 중입니다..."):
                 
                 # RAM 상에서 읽기 (개인정보 휘발성)
@@ -654,7 +658,8 @@ if "eval_result" in st.session_state:
                 data=pdf_bytes,
                 file_name=f"브니엘고_AI_생기부평가_{evaluator_mode}_{st.session_state.get('evaluated_filename', 'student').replace('.pdf','')}.pdf",
                 mime="application/pdf",
-                use_container_width=True
+                use_container_width=True,
+                key="download_pdf_btn"
             )
         else:
             st.warning("ReportLab 모듈이 누락되었습니다. (`pip install reportlab` 필요)")
@@ -691,5 +696,6 @@ if "eval_result" in st.session_state:
             label="📝 간이 리포트 TXT 다운로드",
             data=txt_content,
             file_name="생기부_평가_요약.txt",
-            use_container_width=True
+            use_container_width=True,
+            key="download_txt_btn"
         )
