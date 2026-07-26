@@ -94,6 +94,13 @@ def get_korean_font_path():
         pass
     return None
 
+# --- 세션 상태 초기화 (자동 선택 및 꼬임 원천 방지) ---
+if "feedback_main_cat" not in st.session_state:
+    st.session_state["feedback_main_cat"] = "--- 피드백 대분류 선택 ---"
+
+if "feedback_sub_cat" not in st.session_state:
+    st.session_state["feedback_sub_cat"] = "--- 세부 영역 선택 ---"
+
 # --- 4. 사이드바 구성 ---
 st.sidebar.markdown("<h1 style='text-align: center;'>🎓</h1>", unsafe_allow_html=True)
 st.sidebar.markdown("<h3 style='text-align: center;'>브니엘고 AI 평가 시스템</h3>", unsafe_allow_html=True)
@@ -113,6 +120,11 @@ st.sidebar.divider()
 # 4-2. 피드백 버전 선택 (초기 미선택 상태 고정)
 st.sidebar.markdown("### 📝 2. 평가 및 피드백 버전 선택")
 
+def on_main_cat_change():
+    st.session_state["feedback_sub_cat"] = "--- 세부 영역 선택 ---"
+    if "eval_result" in st.session_state:
+        del st.session_state["eval_result"]
+
 feedback_category = st.sidebar.selectbox(
     "피드백 대분류를 선택하세요 (필수)",
     [
@@ -120,8 +132,8 @@ feedback_category = st.sidebar.selectbox(
         "교사전용 피드백 버전",
         "학생용 피드백 버전"
     ],
-    index=0,
-    key="feedback_category_select"
+    key="feedback_main_cat",
+    on_change=on_main_cat_change
 )
 
 selected_feedback_type = "미선택"
@@ -137,8 +149,7 @@ if feedback_category == "교사전용 피드백 버전":
             "행동발달특기사항 전용 피드백",
             "생기부 종합 전용 피드백"
         ],
-        index=0,
-        key="teacher_detail_radio"
+        key="feedback_sub_cat"
     )
 elif feedback_category == "학생용 피드백 버전":
     selected_feedback_type = "학생전용 피드백"
@@ -214,13 +225,15 @@ if accumulated_files:
 # --- 5. 메인 화면 헤더 및 실시간 채점 기준표 노출 ---
 st.title("🏫 브니엘고등학교 AI 생기부 정밀 평가 시스템")
 
-display_mode_str = selected_feedback_type if "선택" not in selected_feedback_type and selected_feedback_type != "미선택" else "영역 미선택 (좌측 사이드바에서 선택)"
+is_unselected = ("선택" in selected_feedback_type) or (selected_feedback_type == "미선택")
+display_mode_str = selected_feedback_type if not is_unselected else "영역 미선택 (좌측 사이드바에서 선택)"
+
 st.markdown(f"**현재 관점:** `{evaluator_mode}` | **선택된 피드백 모드:** `<font color='#1E3A8A'><b>{display_mode_str}</b></font>` | **적용 기준 파일:** `{len(selected_criteria_files)}개`", unsafe_allow_html=True)
 
 st.markdown("### 📋 AI 실시간 통합 채점 기준표 (메인 상시 노출)")
 
-# 📌 [경로 A] 피드백 영역 미선택 시
-if "선택" in selected_feedback_type or selected_feedback_type == "미선택":
+# 📌 [경로 A] 피드백 영역 미선택 시 (메인 화면에 기준표 표시 안 함)
+if is_unselected:
     st.warning("👈 **왼쪽 사이드바의 [2. 평가 및 피드백 버전 선택]에서 피드백 대분류와 세부 평가 영역을 먼저 선택해 주세요.**")
 
 # 📌 [경로 B] 과목 세부능력 특기사항 전용 피드백 선택 시 7대 교사 점검 항목 표 노출
@@ -428,7 +441,7 @@ student_file = st.file_uploader("학생부 PDF 업로드", type=["pdf"], key="st
 if student_file and api_key:
     st.success(f"📎 학생부 파일 로드 완료: {student_file.name}")
     
-    if "선택" in selected_feedback_type or selected_feedback_type == "미선택":
+    if is_unselected:
         st.warning("⚠️ 왼쪽 사이드바에서 [피드백 대분류 및 세부 평가 영역]을 먼저 선택해야 AI 평가를 시작할 수 있습니다.")
     else:
         if st.button("🔥 선택한 버전으로 AI 정밀 평가 시작하기", type="primary", use_container_width=True, key="start_eval_btn"):
