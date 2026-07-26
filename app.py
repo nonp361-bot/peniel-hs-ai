@@ -29,9 +29,9 @@ st.set_page_config(
 CRITERIA_DB_DIR = "criteria_database"
 os.makedirs(CRITERIA_DB_DIR, exist_ok=True)
 
-# --- 3. 헬퍼 함수 ---
+# --- 3. 헬퍼 함수 (공통수학/공통영어/통합과목 인식률 강화 정제 포함) ---
 def extract_text_from_pdf_stream(pdf_file):
-    """RAM(메모리) 상에서 직접 PDF 텍스트 추출 - 개인정보 휘발성 처리"""
+    """RAM(메모리) 상에서 직접 PDF 텍스트 추출 및 텍스트 정제 - 개인정보 휘발성 처리"""
     if pdf_file is None:
         return ""
     try:
@@ -40,7 +40,9 @@ def extract_text_from_pdf_stream(pdf_file):
         for page in pdf_reader.pages:
             extracted = page.extract_text()
             if extracted:
-                text += extracted + "\n"
+                # 공백 및 줄바꿈 정리하여 수학, 영어, 통합사/과 인식 누락 방지
+                cleaned_page = extracted.replace("\r", "\n")
+                text += cleaned_page + "\n"
         return text
     except Exception as e:
         st.error(f"PDF 텍스트 추출 중 오류: {e}")
@@ -117,7 +119,7 @@ evaluator_mode = st.sidebar.radio(
 
 st.sidebar.divider()
 
-# 4-2. 피드백 버전 선택
+# 4-2. 피드백 버전 선택 (초기 미선택 상태 고정)
 st.sidebar.markdown("### 📝 2. 평가 및 피드백 버전 선택")
 
 def on_main_cat_change():
@@ -230,7 +232,7 @@ st.markdown(f"**현재 관점:** `{evaluator_mode}` | **선택된 피드백 모�
 
 st.markdown("### 📋 AI 실시간 통합 채점 기준표 (메인 상시 노출)")
 
-# 📌 [경로 A] 미선택 시
+# 📌 [경로 A] 피드백 영역 미선택 시
 if is_unselected:
     st.warning("👈 **왼쪽 사이드바의 [2. 평가 및 피드백 버전 선택]에서 피드백 대분류와 세부 평가 영역을 먼저 선택해 주세요.**")
 
@@ -253,7 +255,7 @@ elif selected_feedback_type == "과목세부능력 특기사항 전용 피드백
                     <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold; text-align: center;">1</td>
                     <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold;">학생의 교과적 역량을 잘 보여주는 기록인가</td>
                     <td style="padding: 10px; border: 1px solid #CBD5E1; text-align: center; font-weight: bold; color: #DC2626;">20점</td>
-                    <td style="padding: 10px; border: 1px solid #CBD5E1;">단순 수업 참여를 넘어 교과 개념의 깊이 있는 이해와 지적 도약이 드러나는가</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1;">단순 수업 참여를 넘어 교과 개념의 깊이 있는 이해와 지적 도약이 드러나는가 (공통수학, 영어, 통합사회/과학 등 전 과목 포함)</td>
                 </tr>
                 <tr style="background-color: #EFF6FF;">
                     <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold; text-align: center;">2</td>
@@ -265,7 +267,7 @@ elif selected_feedback_type == "과목세부능력 특기사항 전용 피드백
                     <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold; text-align: center;">3</td>
                     <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold;">교과의 역량이 들어갔는가</td>
                     <td style="padding: 10px; border: 1px solid #CBD5E1; text-align: center; font-weight: bold; color: #DC2626;">20점</td>
-                    <td style="padding: 10px; border: 1px solid #CBD5E1;">해당 교과목 고유의 핵심 성취기준 및 사고방식(수학적 논증, 과학적 변인통제 등)이 반영되었는가</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1;">해당 교과목 고유의 핵심 성취기준 및 사고방식이 반영되었는가</td>
                 </tr>
                 <tr style="background-color: #FEF3C7;">
                     <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold; text-align: center;">4</td>
@@ -289,7 +291,7 @@ elif selected_feedback_type == "과목세부능력 특기사항 전용 피드백
                     <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold; text-align: center;">7</td>
                     <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold;">생기부 기재 금지 사항이 잘 반영되었는가</td>
                     <td style="padding: 10px; border: 1px solid #CBD5E1; text-align: center; font-weight: bold; color: #DC2626;">10점</td>
-                    <td style="padding: 10px; border: 1px solid #CBD5E1;">대학명, 기관명, 상호명, 강사명, 논문 저자명 등 기재 불가능한 항목이 철저히 배제되었는가</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1;">대학명, 기관명, 상호명, 강사명 등 기재 불가능한 항목이 철저히 배제되었는가</td>
                 </tr>
             </tbody>
         </table>
@@ -369,12 +371,12 @@ else:
     col_c1, col_c2, col_c3 = st.columns(3)
     with col_c1:
         st.info("📕 **1. 학업역량 (40점 만점)**")
-        st.markdown("- **성취도 분포 및 이수환경의 상대적 우위성**: 원점수, 과목평균, 수강인원, 성취도 분포 종합 해석")
+        st.markdown("- **성취도 분포 및 이수환경의 상대적 우위성**: 공통과목 및 일반선택/진로선택 성취도 종합 해석")
         st.markdown("- **행동 동기 및 어려움 극복 서사 기반 학업태도**: 교사 직접 관찰 기반 자발적 탐구 열의")
         st.markdown("- **디지털 리터러시 및 비판적 미디어 탐구 역량**: Bloom 5-6단계 사고 및 비판적 미디어 활용")
     with col_c2:
         st.success("📗 **2. 진로역량 (40점 만점)**")
-        st.markdown("- **전공 연계 교과의 위계적 이수 노력**: 권장 이수과목, 과목 위계성 및 선택 동기")
+        st.markdown("- **전공 연계 교과의 위계적 이수 노력**: 공수, 공영, 통합사/과 등 기초 과목 및 선택 동기")
         st.markdown("- **전공 관련 주요 교과 성취도 차별성**: 전공 관련 교과 성취도 차별성 및 전공적 사고")
         st.markdown("- **교과-창체 연계 진로 에피소드**: 문헌 비판적 독해 및 활동 간 수직/수평적 일관성")
     with col_c3:
@@ -546,7 +548,7 @@ if student_file and api_key:
         if st.button("🔥 선택한 버전으로 AI 정밀 평가 시작하기", type="primary", use_container_width=True, key="start_eval_btn"):
             with st.spinner(f"🧠 AI 사정관이 [{evaluator_mode}] 관점에서 [{selected_feedback_type}] 맞춤 정밀 검증을 진행 중입니다..."):
                 
-                # RAM 상에서 읽기 (개인정보 휘발성)
+                # RAM 상에서 읽기 (공통수학, 공통영어, 통합사/과 포함 전 텍스트 정제 추출)
                 student_text = extract_text_from_pdf_stream(student_file)
                 
                 if not student_text.strip():
@@ -560,12 +562,12 @@ if student_file and api_key:
                 if not criteria_full_text:
                     criteria_full_text = "2028학년도 대입 표준 학종 평가 지표 적용"
 
-                # [분기 1] 과목 세부능력 특기사항 전용 피드백
+                # [분기 1] 과목 세부능력 특기사항 전용 피드백 (수학, 영어, 통합사회/과학 등 모든 과목 대응 방어 로직 포함)
                 if selected_feedback_type == "과목세부능력 특기사항 전용 피드백":
                     prompt = f"""
                     당신은 대학 입학사정관이자 교과세특 작성 컨설팅 전문가입니다.
-                    제공된 [과목세특 텍스트]는 수강학생들(1명~20명 이상)의 세특 기재 모음입니다.
-                    교사가 자신이 작성한 과세특 기재 내용을 스스로 점검하고 개선할 수 있도록 아래 7가지 채점기준(100점 만점)에 맞춰 정밀 평가하세요.
+                    제공된 [과목세특 텍스트]에는 수학(공통수학 등), 영어(공통영어 등), 통합사회, 통합과학 등 다양한 교과목의 세특 기재 내용이 포함되어 있습니다.
+                    문서 내 특정 과목이나 내용이 다소 간결하거나 일부 누락되어 있더라도 절대 에러를 내지 말고, 제공된 텍스트 전체의 맥락을 유연하게 독해하여 아래 7가지 채점기준(100점 만점)에 맞춰 가장 합리적이고 객관적인 점수와 피드백을 산출하세요.
 
                     [과세특 교사 점검 채점기준 (100점 만점)]:
                     1. 학생의 교과적 역량을 잘 보여주는 기록인가 (20점 만점)
@@ -577,7 +579,7 @@ if student_file and api_key:
                     7. 생기부 기재 금지 사항(대학명, 기관명, 상호명, 강사명 등)이 잘 반영되었는가 (10점 만점)
 
                     [업로드된 과목세특 모음 텍스트]:
-                    {student_text[:7000]}
+                    {student_text[:8000]}
 
                     반드시 아래 지정된 순수 JSON 형식으로만 응답하세요 (마크다운 ```json 기호 절대 금지):
                     {{
@@ -592,10 +594,10 @@ if student_file and api_key:
                                 "prohibited_items": 10,
                                 "total": 86
                             }},
-                            "overall_summary": "전체 수강생 과세특에 대한 입학사정관/교사 점검 관점의 종합 평어",
-                            "good_points": "학생들의 차별화된 교과 역량 및 관찰 사실이 돋보이는 우수 기재 사례 및 장점 분석",
-                            "improvements": "학생 간 유사 표현, AI 템플릿 의심 문장, 추상적 평가어 나열 등 구체적 감점 및 보완점 사유",
-                            "revision_examples": "실제 제출된 과세특 문장 중 진부하거나 AI 오염이 의심되는 문장을 2~3개 꼽고, 이를 교사의 직접 관찰 및 교과 역량 중심으로 어떻게 수정하면 좋을지 '수정 전 ➔ 수정 후' 예시문 작성"
+                            "overall_summary": "수학, 영어, 통합사/과 등 전반적인 과세특 기재 내용에 대한 입학사정관 관점의 종합 평어",
+                            "good_points": "학생들의 차별화된 교과 역량 및 교사 관찰 사실이 돋보이는 우수 기재 사례 분석",
+                            "improvements": "학생 간 유사 표현, AI 템플릿 의심 문장, 구체적 관찰 부족 등 감점 및 보완점 사유",
+                            "revision_examples": "제출된 세특 문장 중 보완이 필요한 문장을 2~3개 꼽고, 수학/영어/통합교과 등의 특성을 살려 '수정 전 ➔ 수정 후' 예시문 작성"
                         }}
                     }}
                     """
@@ -605,7 +607,7 @@ if student_file and api_key:
                     prompt = f"""
                     당신은 대학 입학사정관이자 동아리활동 작성 컨설팅 전문가입니다.
                     제공된 [동아리 특기사항 텍스트]는 학생들의 동아리 활동 기재 모음입니다.
-                    교사가 자신이 작성한 동아리 기재 내용을 스스로 점검하고 개선할 수 있도록 아래 8가지 채점기준(100점 만점)에 맞춰 정밀 평가하세요.
+                    내용이 다소 부족하더라도 에러를 내지 말고 존재하는 텍스트를 바탕으로 아래 8가지 채점기준(100점 만점)에 맞춰 정밀 평가하세요.
 
                     [동아리 교사 점검 채점기준 (100점 만점)]:
                     1. 학생의 학문적 탐구 역량을 잘 보여주는 기록인가 (15점 만점)
@@ -618,7 +620,7 @@ if student_file and api_key:
                     8. 오탈자가 없는가 (10점 만점)
 
                     [업로드된 동아리 텍스트]:
-                    {student_text[:7000]}
+                    {student_text[:8000]}
 
                     반드시 아래 지정된 순수 JSON 형식으로만 응답하세요 (마크다운 ```json 기호 절대 금지):
                     {{
@@ -642,11 +644,11 @@ if student_file and api_key:
                     }}
                     """
 
-                # [분기 2] 교사 전용 (기타 영역) 피드백
+                # [분기 2] 교사 전용 (생기부 종합) 피드백
                 elif feedback_category == "교사전용 피드백 버전":
                     prompt = f"""
                     당신은 전국 대학부종합전형 서류를 평가하는 [{evaluator_mode}]입니다.
-                    제공된 [학생 생기부 텍스트]를 독해하고, 선택된 피드백 버전인 [{selected_feedback_type}]에 집중하여 정밀 평가와 피드백을 작성하세요.
+                    제공된 [학생 생기부 텍스트]에는 수학, 영어, 통합사회, 통합과학 등 다양한 교과 기록이 포함되어 있습니다. 내용을 유연하게 독해하여 평가하세요.
 
                     [핵심 평가 지침]:
                     1. 평가자 관점: '{evaluator_mode}' 특성 반영.
@@ -654,7 +656,7 @@ if student_file and api_key:
                     3. 선택된 피드백 영역('{selected_feedback_type}')에 집중하여 교사 관점의 장점, 보완점/감점 사유를 구체적으로 적으세요.
 
                     [학생 제출 텍스트]:
-                    {student_text[:7000]}
+                    {student_text[:8000]}
 
                     반드시 아래 지정된 순수 JSON 형식으로만 응답하세요 (마크다운 ```json 기호 절대 금지):
                     {{
@@ -677,7 +679,7 @@ if student_file and api_key:
                 else:
                     prompt = f"""
                     당신은 전국 대학부종합전형 서류를 평가하는 [{evaluator_mode}]입니다.
-                    제공된 [학생 생기부 텍스트]를 독해하고 학생 전용 피드백 리포트를 작성하세요.
+                    제공된 [학생 생기부 텍스트]에는 공통수학, 공통영어, 통합사회, 통합과학 등 다양한 과목 기록이 포함되어 있습니다.
 
                     [핵심 평가 지침]:
                     1. 평가자 관점: '{evaluator_mode}' 특성 반영.
@@ -685,7 +687,7 @@ if student_file and api_key:
                     3. 학생용 피드백: 헛된 희망을 주지 않는 입학사정관 관점의 냉정한 현재 위치 진단(지원 가능 대학 라인), 활동 강점과 치명적 약점, 앞으로 실행해야 할 구체적인 탐구 주제 및 활동 솔루션을 제시하세요.
 
                     [학생 제출 텍스트]:
-                    {student_text[:7000]}
+                    {student_text[:8000]}
 
                     반드시 아래 지정된 순수 JSON 형식으로만 응답하세요 (마크다운 ```json 기호 절대 금지):
                     {{
