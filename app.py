@@ -6,6 +6,13 @@ import os
 import urllib.request
 from io import BytesIO
 
+# --- Word (DOCX) 생성 라이브러리 예외 처리 ---
+try:
+    from docx import Document
+    DOCX_AVAILABLE = True
+except ImportError:
+    DOCX_AVAILABLE = False
+
 # --- ReportLab PDF 라이브러리 연동 ---
 try:
     from reportlab.lib.pagesizes import A4
@@ -29,9 +36,9 @@ st.set_page_config(
 CRITERIA_DB_DIR = "criteria_database"
 os.makedirs(CRITERIA_DB_DIR, exist_ok=True)
 
-# --- 3. 헬퍼 함수 (공통수학/공통영어/통합과목 인식률 강화 정제 포함) ---
+# --- 3. 헬퍼 함수 ---
 def extract_text_from_pdf_stream(pdf_file):
-    """RAM(메모리) 상에서 직접 PDF 텍스트 추출 및 텍스트 정제 - 개인정보 휘발성 처리"""
+    """RAM(메모리) 상에서 직접 PDF 텍스트 추출 및 정제 - 개인정보 휘발성 처리"""
     if pdf_file is None:
         return ""
     try:
@@ -40,9 +47,8 @@ def extract_text_from_pdf_stream(pdf_file):
         for page in pdf_reader.pages:
             extracted = page.extract_text()
             if extracted:
-                # 공백 및 줄바꿈 정리하여 수학, 영어, 통합사/과 인식 누락 방지
-                cleaned_page = extracted.replace("\r", "\n")
-                text += cleaned_page + "\n"
+                cleaned = extracted.replace("\r", "\n")
+                text += cleaned + "\n"
         return text
     except Exception as e:
         st.error(f"PDF 텍스트 추출 중 오류: {e}")
@@ -255,7 +261,7 @@ elif selected_feedback_type == "과목세부능력 특기사항 전용 피드백
                     <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold; text-align: center;">1</td>
                     <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold;">학생의 교과적 역량을 잘 보여주는 기록인가</td>
                     <td style="padding: 10px; border: 1px solid #CBD5E1; text-align: center; font-weight: bold; color: #DC2626;">20점</td>
-                    <td style="padding: 10px; border: 1px solid #CBD5E1;">단순 수업 참여를 넘어 교과 개념의 깊이 있는 이해와 지적 도약이 드러나는가 (공통수학, 영어, 통합사회/과학 등 전 과목 포함)</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1;">단순 수업 참여를 넘어 교과 개념의 깊이 있는 이해와 지적 도약이 드러나는가 (수학, 영어, 통합사회/과학 등 전 과목 포함)</td>
                 </tr>
                 <tr style="background-color: #EFF6FF;">
                     <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold; text-align: center;">2</td>
@@ -371,12 +377,12 @@ else:
     col_c1, col_c2, col_c3 = st.columns(3)
     with col_c1:
         st.info("📕 **1. 학업역량 (40점 만점)**")
-        st.markdown("- **성취도 분포 및 이수환경의 상대적 우위성**: 공통과목 및 일반선택/진로선택 성취도 종합 해석")
+        st.markdown("- **성취도 분포 및 이수환경의 상대적 우위성**: 공통과목(공통수학, 영어 등) 및 선택과목 종합 해석")
         st.markdown("- **행동 동기 및 어려움 극복 서사 기반 학업태도**: 교사 직접 관찰 기반 자발적 탐구 열의")
         st.markdown("- **디지털 리터러시 및 비판적 미디어 탐구 역량**: Bloom 5-6단계 사고 및 비판적 미디어 활용")
     with col_c2:
         st.success("📗 **2. 진로역량 (40점 만점)**")
-        st.markdown("- **전공 연계 교과의 위계적 이수 노력**: 공수, 공영, 통합사/과 등 기초 과목 및 선택 동기")
+        st.markdown("- **전공 연계 교과의 위계적 이수 노력**: 권장 이수과목, 과목 위계성 및 선택 동기")
         st.markdown("- **전공 관련 주요 교과 성취도 차별성**: 전공 관련 교과 성취도 차별성 및 전공적 사고")
         st.markdown("- **교과-창체 연계 진로 에피소드**: 문헌 비판적 독해 및 활동 간 수직/수평적 일관성")
     with col_c3:
@@ -387,7 +393,7 @@ else:
 
 st.divider()
 
-# --- 6. PDF 리포트 생성 함수 (ReportLab 연동) ---
+# --- 6. PDF 및 DOCX 보고서 생성 함수 ---
 def generate_pdf_report(eval_data, student_filename, mode, fb_type):
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=35, leftMargin=35, topMargin=35, bottomMargin=35)
@@ -424,11 +430,9 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
     story.append(Paragraph(f"대상 파일: {student_filename}  |  평가 모드: {fb_type}", subtitle_style))
     story.append(Spacer(1, 4))
     
-    # 1) 과목 세특 교사 점검 리포트
     if fb_type == "과목세부능력 특기사항 전용 피드백" and "setuk_eval" in eval_data:
         st_data = eval_data["setuk_eval"]
         t_scores = st_data.get("scores", {})
-        
         table_data = [
             [Paragraph("<b>과세특 교사 7대 점검 항목</b>", body_style), Paragraph("<b>배점</b>", body_style), Paragraph("<b>획득 점수</b>", body_style)],
             [Paragraph("1. 학생의 교과적 역량 서술", body_style), Paragraph("20점", body_style), Paragraph(f"{t_scores.get('academic_competence', 0)}점", body_style)],
@@ -441,26 +445,18 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
             [Paragraph("<b>✨ 최종 과세특 작성 품질 총점</b>", body_style), Paragraph("<b>100점</b>", body_style), Paragraph(f"<b><font color='#EF4444'>{t_scores.get('total', 0)} / 100</font></b>", body_style)]
         ]
         t_score = Table(table_data, colWidths=[220, 100, 200])
-        t_score.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F3F4F6')),
-            ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')),
-            ('BACKGROUND', (0,8), (-1,8), colors.HexColor('#FEF2F2')),
-        ]))
+        t_score.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F3F4F6')), ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')), ('BACKGROUND', (0,8), (-1,8), colors.HexColor('#FEF2F2'))]))
         story.append(t_score)
         story.append(Spacer(1, 10))
-        
         story.append(Paragraph("👩‍🏫 [과세특 개선 피드백 리포트]", h1_style))
         story.append(Paragraph(f"• <b>종합 총평:</b> {st_data.get('overall_summary', '')}", body_style))
         story.append(Paragraph(f"• <b>기재 우수 사항:</b> {st_data.get('good_points', '')}", body_style))
         story.append(Paragraph(f"• <b>보완 및 수정 필요사항:</b> {st_data.get('improvements', '')}", body_style))
         story.append(Spacer(1, 4))
         story.append(create_box(f"<b>✏️ 수정·보완 추천 문장 가이드:</b><br/>{st_data.get('revision_examples', '')}", '#FEF2F2', '#EF4444', '#991B1B'))
-
-    # 1-2) 동아리 특기사항 교사 점검 리포트
     elif fb_type == "동아리 특기사항 전용 피드백" and "club_eval" in eval_data:
         c_data = eval_data["club_eval"]
         c_scores = c_data.get("scores", {})
-        
         table_data = [
             [Paragraph("<b>동아리 교사 8대 점검 항목</b>", body_style), Paragraph("<b>배점</b>", body_style), Paragraph("<b>획득 점수</b>", body_style)],
             [Paragraph("1. 학생의 학문적 탐구 역량", body_style), Paragraph("15점", body_style), Paragraph(f"{c_scores.get('academic_inquiry', 0)}점", body_style)],
@@ -474,22 +470,15 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
             [Paragraph("<b>✨ 최종 동아리 작성 품질 총점</b>", body_style), Paragraph("<b>100점</b>", body_style), Paragraph(f"<b><font color='#EF4444'>{c_scores.get('total', 0)} / 100</font></b>", body_style)]
         ]
         t_score = Table(table_data, colWidths=[220, 100, 200])
-        t_score.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F3F4F6')),
-            ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')),
-            ('BACKGROUND', (0,9), (-1,9), colors.HexColor('#FEF2F2')),
-        ]))
+        t_score.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F3F4F6')), ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')), ('BACKGROUND', (0,9), (-1,9), colors.HexColor('#FEF2F2'))]))
         story.append(t_score)
         story.append(Spacer(1, 10))
-        
         story.append(Paragraph("👩‍🏫 [동아리 특기사항 개선 피드백 리포트]", h1_style))
         story.append(Paragraph(f"• <b>종합 총평:</b> {c_data.get('overall_summary', '')}", body_style))
         story.append(Paragraph(f"• <b>기재 우수 사항:</b> {c_data.get('good_points', '')}", body_style))
         story.append(Paragraph(f"• <b>보완 및 수정 필요사항:</b> {c_data.get('improvements', '')}", body_style))
         story.append(Spacer(1, 4))
         story.append(create_box(f"<b>✏️ 수정·보완 추천 문장 가이드:</b><br/>{c_data.get('revision_examples', '')}", '#FEF2F2', '#EF4444', '#991B1B'))
-
-    # 2) 표준 생기부 리포트
     else:
         scores = eval_data.get("scores", {})
         table_data = [
@@ -500,14 +489,9 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
             [Paragraph("<b>✨ 최종 환산 총점</b>", body_style), Paragraph("<b>100점 만점 기준 종합 환산점수</b>", body_style), Paragraph(f"<b><font color='#EF4444'>{scores.get('total', 0)} / 100</font></b>", body_style)]
         ]
         t_score = Table(table_data, colWidths=[120, 280, 120])
-        t_score.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F3F4F6')),
-            ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')),
-            ('BACKGROUND', (0,4), (-1,4), colors.HexColor('#FEF2F2')),
-        ]))
+        t_score.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F3F4F6')), ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')), ('BACKGROUND', (0,4), (-1,4), colors.HexColor('#FEF2F2'))]))
         story.append(t_score)
         story.append(Spacer(1, 10))
-        
         if "teacher_feedback" in eval_data:
             story.append(Paragraph(f"👩‍🏫 [교사전용 정밀 피드백: {fb_type}]", h1_style))
             tf = eval_data["teacher_feedback"]
@@ -515,7 +499,6 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
             story.append(Paragraph(f"• <b>⚠️ 보완점 및 감점 원인:</b> {tf.get('weakness', '')}", body_style))
             if tf.get('quote'):
                 story.append(create_box(f"<b>🎯 원문 인용 근거:</b> \"{tf['quote']}\"", '#FEF3C7', '#F59E0B', '#451A03'))
-                
         if "student_feedback" in eval_data:
             story.append(Paragraph("🎓 [학생전용 현위치 진단 & 솔루션]", h1_style))
             sf = eval_data["student_feedback"]
@@ -533,6 +516,67 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
     buffer.close()
     return pdf_bytes
 
+def generate_docx_report(eval_data, student_filename, mode, fb_type):
+    if not DOCX_AVAILABLE:
+        return None
+    doc = Document()
+    doc.add_heading(f"브니엘고 AI 생기부 평가 리포트 ({mode})", 0)
+    doc.add_paragraph(f"대상 파일: {student_filename} | 평가 모드: {fb_type}")
+    
+    if fb_type == "과목세부능력 특기사항 전용 피드백" and "setuk_eval" in eval_data:
+        st_data = eval_data["setuk_eval"]
+        doc.add_heading("과세특 교사 7대 점검 항목 평가", level=1)
+        scores = st_data.get("scores", {})
+        doc.add_paragraph(f"최종 과세특 작성 품질 총점: {scores.get('total', 0)} / 100")
+        doc.add_heading("종합 평어", level=2)
+        doc.add_paragraph(st_data.get("overall_summary", ""))
+        doc.add_heading("우수 사항", level=2)
+        doc.add_paragraph(st_data.get("good_points", ""))
+        doc.add_heading("보완 및 수정 필요사항", level=2)
+        doc.add_paragraph(st_data.get("improvements", ""))
+        doc.add_heading("수정 추천 문장 예시", level=2)
+        doc.add_paragraph(st_data.get("revision_examples", ""))
+    elif fb_type == "동아리 특기사항 전용 피드백" and "club_eval" in eval_data:
+        c_data = eval_data["club_eval"]
+        doc.add_heading("동아리 교사 8대 점검 항목 평가", level=1)
+        scores = c_data.get("scores", {})
+        doc.add_paragraph(f"최종 동아리 작성 품질 총점: {scores.get('total', 0)} / 100")
+        doc.add_heading("종합 평어", level=2)
+        doc.add_paragraph(c_data.get("overall_summary", ""))
+        doc.add_heading("우수 사항", level=2)
+        doc.add_paragraph(c_data.get("good_points", ""))
+        doc.add_heading("보완 및 수정 필요사항", level=2)
+        doc.add_paragraph(c_data.get("improvements", ""))
+        doc.add_heading("수정 추천 문장 예시", level=2)
+        doc.add_paragraph(c_data.get("revision_examples", ""))
+    else:
+        scores = eval_data.get("scores", {})
+        doc.add_heading("100점 만점 영역별 스코어 카드", level=1)
+        doc.add_paragraph(f"학업역량: {scores.get('academic', 0)} / 40")
+        doc.add_paragraph(f"진로역량: {scores.get('career', 0)} / 40")
+        doc.add_paragraph(f"공동체역량: {scores.get('community', 0)} / 20")
+        doc.add_paragraph(f"최종 환산 총점: {scores.get('total', 0)} / 100")
+        
+        if "teacher_feedback" in eval_data:
+            doc.add_heading(f"교사전용 피드백 ({fb_type})", level=1)
+            tf = eval_data["teacher_feedback"]
+            doc.add_paragraph(f"장점 분석: {tf.get('strength', '')}")
+            doc.add_paragraph(f"보완점 및 감점 원인: {tf.get('weakness', '')}")
+            if tf.get('quote'):
+                doc.add_paragraph(f"원문 인용 근거: \"{tf['quote']}\"")
+                
+        if "student_feedback" in eval_data:
+            doc.add_heading("학생전용 현위치 진단 & 솔루션", level=1)
+            sf = eval_data["student_feedback"]
+            doc.add_paragraph(f"현재 위치 진단: {sf.get('current_position', '')}")
+            doc.add_paragraph(f"활동 강점: {sf.get('strength_analysis', '')}")
+            doc.add_paragraph(f"치명적 약점: {sf.get('weakness_analysis', '')}")
+            doc.add_paragraph(f"추천 탐구 주제 솔루션: {sf.get('recommendation', '')}")
+            
+    doc_buffer = BytesIO()
+    doc.save(doc_buffer)
+    return doc_buffer.getvalue()
+
 # --- 7. 학생부 PDF 제출 및 AI 평가 구역 ---
 st.markdown("### 📂 학생부 PDF 제출 및 맞춤형 AI 채점")
 st.caption("🔒 제출한 생기부 PDF는 디스크에 저장되지 않으며, RAM에서 읽어 평가 후 즉시 영구 휘발 삭제됩니다.")
@@ -548,7 +592,7 @@ if student_file and api_key:
         if st.button("🔥 선택한 버전으로 AI 정밀 평가 시작하기", type="primary", use_container_width=True, key="start_eval_btn"):
             with st.spinner(f"🧠 AI 사정관이 [{evaluator_mode}] 관점에서 [{selected_feedback_type}] 맞춤 정밀 검증을 진행 중입니다..."):
                 
-                # RAM 상에서 읽기 (공통수학, 공통영어, 통합사/과 포함 전 텍스트 정제 추출)
+                # RAM 상에서 읽기 (팩트 기반 텍스트 추출)
                 student_text = extract_text_from_pdf_stream(student_file)
                 
                 if not student_text.strip():
@@ -562,12 +606,16 @@ if student_file and api_key:
                 if not criteria_full_text:
                     criteria_full_text = "2028학년도 대입 표준 학종 평가 지표 적용"
 
-                # [분기 1] 과목 세부능력 특기사항 전용 피드백 (수학, 영어, 통합사회/과학 등 모든 과목 대응 방어 로직 포함)
+                # [분기 1] 과목 세부능력 특기사항 전용 피드백
                 if selected_feedback_type == "과목세부능력 특기사항 전용 피드백":
                     prompt = f"""
                     당신은 대학 입학사정관이자 교과세특 작성 컨설팅 전문가입니다.
                     제공된 [과목세특 텍스트]에는 수학(공통수학 등), 영어(공통영어 등), 통합사회, 통합과학 등 다양한 교과목의 세특 기재 내용이 포함되어 있습니다.
-                    문서 내 특정 과목이나 내용이 다소 간결하거나 일부 누락되어 있더라도 절대 에러를 내지 말고, 제공된 텍스트 전체의 맥락을 유연하게 독해하여 아래 7가지 채점기준(100점 만점)에 맞춰 가장 합리적이고 객관적인 점수와 피드백을 산출하세요.
+                    
+                    [절대 준수 원칙 - 환각 방지]:
+                    - 반드시 업로드된 [과목세특 텍스트]에 실제 기재된 사실과 문구만을 근거로 삼아 평가해야 합니다.
+                    - 학생이 하지 않은 활동이나 생기부에 없는 내용을 AI가 스스로 지어내어 평가하거나 없는 사실을 가공해서는 절대 안 됩니다.
+                    - 문서 내 특정 과목이나 내용이 다소 간결하거나 일부 누락되어 있더라도 에러를 내지 말고, 존재하는 텍스트의 맥락을 최대한 기반으로 하여 아래 7가지 채점기준(100점 만점)에 맞춰 정밀하게 평가하세요.
 
                     [과세특 교사 점검 채점기준 (100점 만점)]:
                     1. 학생의 교과적 역량을 잘 보여주는 기록인가 (20점 만점)
@@ -594,10 +642,10 @@ if student_file and api_key:
                                 "prohibited_items": 10,
                                 "total": 86
                             }},
-                            "overall_summary": "수학, 영어, 통합사/과 등 전반적인 과세특 기재 내용에 대한 입학사정관 관점의 종합 평어",
-                            "good_points": "학생들의 차별화된 교과 역량 및 교사 관찰 사실이 돋보이는 우수 기재 사례 분석",
-                            "improvements": "학생 간 유사 표현, AI 템플릿 의심 문장, 구체적 관찰 부족 등 감점 및 보완점 사유",
-                            "revision_examples": "제출된 세특 문장 중 보완이 필요한 문장을 2~3개 꼽고, 수학/영어/통합교과 등의 특성을 살려 '수정 전 ➔ 수정 후' 예시문 작성"
+                            "overall_summary": "수학, 영어, 통합사/과 등 과세특 기재 내용에 대한 입학사정관 관점의 팩트 기반 종합 평어",
+                            "good_points": "제출된 텍스트에 기반하여 학생들의 차별화된 교과 역량 및 교사 관찰 사실이 돋보이는 우수 사례 분석",
+                            "improvements": "생기부 텍스트에 나타난 구체적 관찰 부족, 유사 표현 등 감점 및 보완점 사유",
+                            "revision_examples": "실제 제출된 세특 문장 중 보완이 필요한 문장을 꼽고, '수정 전 ➔ 수정 후' 예시문 작성"
                         }}
                     }}
                     """
@@ -607,7 +655,9 @@ if student_file and api_key:
                     prompt = f"""
                     당신은 대학 입학사정관이자 동아리활동 작성 컨설팅 전문가입니다.
                     제공된 [동아리 특기사항 텍스트]는 학생들의 동아리 활동 기재 모음입니다.
-                    내용이 다소 부족하더라도 에러를 내지 말고 존재하는 텍스트를 바탕으로 아래 8가지 채점기준(100점 만점)에 맞춰 정밀 평가하세요.
+                    
+                    [절대 준수 원칙 - 환각 방지]:
+                    - 반드시 제공된 텍스트에 있는 사실만을 근거로 평가하세요. 없는 내용을 지어내지 마세요.
 
                     [동아리 교사 점검 채점기준 (100점 만점)]:
                     1. 학생의 학문적 탐구 역량을 잘 보여주는 기록인가 (15점 만점)
@@ -636,24 +686,32 @@ if student_file and api_key:
                                 "typo_check": 10,
                                 "total": 90
                             }},
-                            "overall_summary": "동아리 특기사항에 대한 입학사정관 관점의 종합 평어",
+                            "overall_summary": "동아리 특기사항에 대한 입학사정관 관점의 팩트 기반 종합 평어",
                             "good_points": "학문적 탐구 역량 및 교과 연계 심화 탐구가 돋보이는 우수 사례 분석",
                             "improvements": "구체적 관찰 사실 부족, 복붙 표현, 금지사항 등 구체적 감점 및 보완점 사유",
-                            "revision_examples": "진부하거나 미흡한 문장을 2~3개 꼽고 교사 관찰 및 교과 연계 중심으로 어떻게 수정할지 '수정 전 ➔ 수정 후' 예시 작성"
+                            "revision_examples": "진부하거나 미흡한 문장을 꼽고 교사 관찰 및 교과 연계 중심으로 어떻게 수정할지 '수정 전 ➔ 수정 후' 예시 작성"
                         }}
                     }}
                     """
 
-                # [분기 2] 교사 전용 (생기부 종합) 피드백
+                # [분기 2] 교사 전용 (생기부 종합) 피드백 (교사 기록 적절성, 가독성, 성적 수준 적절성, AI 남용 여부 및 향후 지도 방향 포함)
                 elif feedback_category == "교사전용 피드백 버전":
                     prompt = f"""
                     당신은 전국 대학부종합전형 서류를 평가하는 [{evaluator_mode}]입니다.
-                    제공된 [학생 생기부 텍스트]에는 수학, 영어, 통합사회, 통합과학 등 다양한 교과 기록이 포함되어 있습니다. 내용을 유연하게 독해하여 평가하세요.
+                    제공된 [학생 생기부 텍스트]에는 수학, 영어, 통합사회, 통합과학 등 다양한 교과 기록이 포함되어 있습니다.
+                    
+                    [절대 준수 원칙 - 환각 방지]:
+                    - 반드시 생기부 PDF에 실제로 적힌 텍스트 내용만을 근거로 평가하세요. 없는 내용을 만들어내지 마세요.
 
-                    [핵심 평가 지침]:
+                    [핵심 평가 지침 (생기부 종합 전용 피드백)]:
                     1. 평가자 관점: '{evaluator_mode}' 특성 반영.
                     2. 학업(40점)/진로(40점)/공동체(20점) 총 100점 만점으로 점수를 매기세요.
-                    3. 선택된 피드백 영역('{selected_feedback_type}')에 집중하여 교사 관점의 장점, 보완점/감점 사유를 구체적으로 적으세요.
+                    3. 학생 성적과 활동에 대한 교사의 기록이 적절했는지 상세히 진단하세요:
+                       - 교사의 관찰(구체적 행동이나 수업 태도 등)이 잘 드러났는지
+                       - 기록의 가독성과 문장 구조가 매끄러운지
+                       - 학생의 성적 수준(원점수, 과목 평균, 등급 등)에 어울리는 기록인지
+                       - AI를 남용한 티(거대 담론 나열, 구체적 사례 부재 등)가 나는지 여부
+                    4. 학생에게 앞으로 어떤 방향으로 활동을 보완하고 확장해야 할지 구체적인 지도 방향과 피드백을 제시하세요.
 
                     [학생 제출 텍스트]:
                     {student_text[:8000]}
@@ -668,8 +726,8 @@ if student_file and api_key:
                         }},
                         "teacher_feedback": {{
                             "category": "{selected_feedback_type}",
-                            "strength": "{selected_feedback_type} 관점에서의 탁월한 장점 상세 서술",
-                            "weakness": "{selected_feedback_type} 관점에서의 보완점 및 감점 사유 지적",
+                            "strength": "교사 기록의 적절성(관찰, 가독성, 성적 수준 부합도 등) 측면에서의 우수한 장점 서술",
+                            "weakness": "교사 기록의 보완점(AI 남용 흔적, 구체적 관찰 부족 등) 및 감점 사유 지적, 그리고 앞으로 학생을 어떤 방향으로 지도해야 할지에 대한 구체적 제언",
                             "quote": "텍스트에서 실제 인용한 핵심 문장"
                         }}
                     }}
@@ -680,6 +738,9 @@ if student_file and api_key:
                     prompt = f"""
                     당신은 전국 대학부종합전형 서류를 평가하는 [{evaluator_mode}]입니다.
                     제공된 [학생 생기부 텍스트]에는 공통수학, 공통영어, 통합사회, 통합과학 등 다양한 과목 기록이 포함되어 있습니다.
+                    
+                    [절대 준수 원칙 - 환각 방지]:
+                    - 반드시 실제 기재된 생기부 텍스트 내용만을 근거로 진단하세요. 지어낸 활동으로 평가하지 마세요.
 
                     [핵심 평가 지침]:
                     1. 평가자 관점: '{evaluator_mode}' 특성 반영.
@@ -811,7 +872,7 @@ if "eval_result" in st.session_state:
             st.subheader("🎓 학생 전용 쓴소리 진단 및 탐구 솔루션 리포트")
             sf = res["student_feedback"]
             
-            st.markdown("#### 🔍 1. 입학사정관 관점의 냉정한 현재 위치 (지원 가능 대학 라인)")
+            st.markdown("#### 🔍 1. 입학사정관 관점 냉정한 현재 위치 (지원 가능 대학 라인)")
             st.error(sf.get("current_position", ""))
             
             col_st1, col_st2 = st.columns(2)
@@ -827,7 +888,7 @@ if "eval_result" in st.session_state:
 
     st.divider()
     
-    # --- 9. PDF / TXT 다운로드 기능 (요구사항 5) ---
+    # --- 9. PDF / DOCX 다운로드 기능 (요구사항 5) ---
     st.markdown("### 📥 3단계: 정밀 진단 보고서 다운로드")
     d1, d2 = st.columns(2)
     
@@ -851,45 +912,20 @@ if "eval_result" in st.session_state:
             st.warning("ReportLab 모듈이 누락되었습니다. (`pip install reportlab` 필요)")
             
     with d2:
-        txt_content = f"=== 브니엘고 AI 생기부 평가 리포트 ({evaluator_mode}) ===\n"
-        txt_content += f"평가 모드: {fb_title}\n\n"
-        
-        if fb_title == "과목세부능력 특기사항 전용 피드백" and "setuk_eval" in res:
-            st_eval = res["setuk_eval"]
-            t_sc = st_eval.get("scores", {})
-            txt_content += f"과세특 기재품질 점수: {t_sc.get('total', 0)} / 100\n\n"
-            txt_content += f"[종합 평어]\n{st_eval.get('overall_summary', '')}\n\n"
-            txt_content += f"[우수 사항]\n{st_eval.get('good_points', '')}\n\n"
-            txt_content += f"[보완 및 수정 필요사항]\n{st_eval.get('improvements', '')}\n\n"
-            txt_content += f"[수정 추천 문장 예시]\n{st_eval.get('revision_examples', '')}\n"
-        elif fb_title == "동아리 특기사항 전용 피드백" and "club_eval" in res:
-            c_eval = res["club_eval"]
-            c_sc = c_eval.get("scores", {})
-            txt_content += f"동아리 기재품질 점수: {c_sc.get('total', 0)} / 100\n\n"
-            txt_content += f"[종합 평어]\n{c_eval.get('overall_summary', '')}\n\n"
-            txt_content += f"[우수 사항]\n{c_eval.get('good_points', '')}\n\n"
-            txt_content += f"[보완 및 수정 필요사항]\n{c_eval.get('improvements', '')}\n\n"
-            txt_content += f"[수정 추천 문장 예시]\n{c_eval.get('revision_examples', '')}\n"
+        if DOCX_AVAILABLE:
+            docx_bytes = generate_docx_report(
+                res, 
+                st.session_state.get("evaluated_filename", "student.pdf"), 
+                evaluator_mode, 
+                fb_title
+            )
+            st.download_button(
+                label="📝 정밀 진단 보고서 WORD(DOCX) 다운로드",
+                data=docx_bytes,
+                file_name=f"브니엘고_AI_생기부평가_{evaluator_mode}_{st.session_state.get('evaluated_filename', 'student').replace('.pdf','')}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True,
+                key="download_docx_btn"
+            )
         else:
-            scores = res.get("scores", {})
-            txt_content += f"종합 점수: {scores.get('total', 0)} / 100\n\n"
-            txt_content += f"- 학업역량: {scores.get('academic', 0)}/40\n"
-            txt_content += f"- 진로역량: {scores.get('career', 0)}/40\n"
-            txt_content += f"- 공동체역량: {scores.get('community', 0)}/20\n\n"
-            
-            if "teacher_feedback" in res:
-                tf = res["teacher_feedback"]
-                txt_content += f"[교사 피드백 장점]\n{tf.get('strength', '')}\n\n"
-                txt_content += f"[교사 피드백 보완점]\n{tf.get('weakness', '')}\n\n"
-            if "student_feedback" in res:
-                sf = res["student_feedback"]
-                txt_content += f"[학생 현위치 진단]\n{sf.get('current_position', '')}\n\n"
-                txt_content += f"[추천 탐구 주제 솔루션]\n{sf.get('recommendation', '')}\n"
-            
-        st.download_button(
-            label="📝 간이 리포트 TXT 다운로드",
-            data=txt_content,
-            file_name="생기부_평가_요약.txt",
-            use_container_width=True,
-            key="download_txt_btn"
-        )
+            st.warning("python-docx 모듈이 누락되었습니다. (`pip install python-docx` 필요)")
