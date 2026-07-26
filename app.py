@@ -94,7 +94,7 @@ def get_korean_font_path():
         pass
     return None
 
-# --- 세션 상태 초기화 (자동 선택 및 꼬임 원천 방지) ---
+# --- 세션 상태 초기화 (자동 선택 방지용) ---
 if "feedback_main_cat" not in st.session_state:
     st.session_state["feedback_main_cat"] = "--- 피드백 대분류 선택 ---"
 
@@ -236,7 +236,7 @@ st.markdown("### 📋 AI 실시간 통합 채점 기준표 (메인 상시 노출
 if is_unselected:
     st.warning("👈 **왼쪽 사이드바의 [2. 평가 및 피드백 버전 선택]에서 피드백 대분류와 세부 평가 영역을 먼저 선택해 주세요.**")
 
-# 📌 [경로 B] 과목 세부능력 특기사항 전용 피드백 선택 시 7대 교사 점검 항목 표 노출
+# 📌 [경로 B-1] 과목 세부능력 특기사항 전용 피드백 선택 시 7대 교사 점검 항목 표 노출
 elif selected_feedback_type == "과목세부능력 특기사항 전용 피드백":
     st.info("💡 **과목 세부능력 특기사항 교사 자가점검 7대 핵심 채점기준표 (100점 만점)**")
     st.markdown("""
@@ -292,6 +292,74 @@ elif selected_feedback_type == "과목세부능력 특기사항 전용 피드백
                     <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold;">생기부 기재 금지 사항이 잘 반영되었는가</td>
                     <td style="padding: 10px; border: 1px solid #CBD5E1; text-align: center; font-weight: bold; color: #DC2626;">10점</td>
                     <td style="padding: 10px; border: 1px solid #CBD5E1;">대학명, 기관명, 상호명, 강사명, 논문 저자명 등 기재 불가능한 항목이 철저히 배제되었는가</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    """, unsafe_allow_html=True)
+
+# 📌 [경로 B-2] 동아리 특기사항 전용 피드백 선택 시 8대 동아리 점검 항목 표 노출
+elif selected_feedback_type == "동아리 특기사항 전용 피드백":
+    st.info("💡 **동아리 특기사항 교사 자가점검 8대 핵심 채점기준표 (100점 만점)**")
+    st.markdown("""
+    <div style="background-color: #F8FAFC; border: 1.5px solid #CBD5E1; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+        <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 14.5px;">
+            <thead>
+                <tr style="background-color: #1E3A8A; color: white;">
+                    <th style="padding: 10px; border: 1px solid #CBD5E1; text-align: center; width: 60px;">번호</th>
+                    <th style="padding: 10px; border: 1px solid #CBD5E1; width: 340px;">동아리 교사 8대 점검 항목</th>
+                    <th style="padding: 10px; border: 1px solid #CBD5E1; text-align: center; width: 80px;">배점</th>
+                    <th style="padding: 10px; border: 1px solid #CBD5E1;">핵심 점검 내용 및 세부 가이드</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr style="background-color: #EFF6FF;">
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold; text-align: center;">1</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold;">학생의 학문적 탐구 역량을 잘 보여주는 기록인가</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; text-align: center; font-weight: bold; color: #DC2626;">15점</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1;">동아리 활동 속에서 심화된 지적 호기심과 학문적 깊이가 드러나는가</td>
+                </tr>
+                <tr style="background-color: #EFF6FF;">
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold; text-align: center;">2</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold;">교사의 관찰이 들어간 기록인가</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; text-align: center; font-weight: bold; color: #DC2626;">15점</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1;">단순 동아리 소개나 활동 나열이 아닌 지도교사의 구체적 관찰 사실이 기재되었는가</td>
+                </tr>
+                <tr style="background-color: #EFF6FF;">
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold; text-align: center;">3</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold;">학생이 이수한 교과목에서 심화 탐구한 내용이 들어갔는가</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; text-align: center; font-weight: bold; color: #DC2626;">15점</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1;">정규 교과 지식을 동아리 활동 속에서 어떻게 확장하고 심화했는지 연결고리가 있는가</td>
+                </tr>
+                <tr style="background-color: #FEF3C7;">
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold; text-align: center;">4</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold;">학생 간 복붙한 기록이 없는가</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; text-align: center; font-weight: bold; color: #DC2626;">10점</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1;">동아리 부원 전원에게 동일하게 적용된 복사-붙여넣기식 서술이 배제되었는가</td>
+                </tr>
+                <tr style="background-color: #FEF3C7;">
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold; text-align: center;">5</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold;">AI를 너무 돌려 맥락에 맞지 않는 단어나 문장이 들어가지 않았는가</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; text-align: center; font-weight: bold; color: #DC2626;">10점</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1;">개인별 구체적 역할 없이 거대 담론이나 어색한 AI 생성 표현만 가득하지 않은가</td>
+                </tr>
+                <tr style="background-color: #F3F4F6;">
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold; text-align: center;">6</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold;">가독성이 높은가</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; text-align: center; font-weight: bold; color: #DC2626;">15점</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1;">주도적 동기, 협업 과정, 성장의 서사가 논리적으로 매끄럽게 연결되는가</td>
+                </tr>
+                <tr style="background-color: #F3F4F6;">
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold; text-align: center;">7</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold;">생기부 기재 금지 사항이 잘 반영되어 있는가</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; text-align: center; font-weight: bold; color: #DC2626;">10점</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1;">외부 기관명, 대회 명칭, 인증 시험명 등 기재 불가 항목이 철저히 배제되었는가</td>
+                </tr>
+                <tr style="background-color: #F3F4F6;">
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold; text-align: center;">8</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; font-weight: bold;">오탈자가 없는가</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1; text-align: center; font-weight: bold; color: #DC2626;">10점</td>
+                    <td style="padding: 10px; border: 1px solid #CBD5E1;">맞춤법, 띄어쓰기, 문장 부호 등의 오탈자가 완벽하게 검수되었는가</td>
                 </tr>
             </tbody>
         </table>
@@ -387,6 +455,39 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
         story.append(Paragraph(f"• <b>보완 및 수정 필요사항:</b> {st_data.get('improvements', '')}", body_style))
         story.append(Spacer(1, 4))
         story.append(create_box(f"<b>✏️ 수정·보완 추천 문장 가이드:</b><br/>{st_data.get('revision_examples', '')}", '#FEF2F2', '#EF4444', '#991B1B'))
+
+    # 1-2) 동아리 특기사항 교사 점검 리포트
+    elif fb_type == "동아리 특기사항 전용 피드백" and "club_eval" in eval_data:
+        c_data = eval_data["club_eval"]
+        c_scores = c_data.get("scores", {})
+        
+        table_data = [
+            [Paragraph("<b>동아리 교사 8대 점검 항목</b>", body_style), Paragraph("<b>배점</b>", body_style), Paragraph("<b>획득 점수</b>", body_style)],
+            [Paragraph("1. 학생의 학문적 탐구 역량", body_style), Paragraph("15점", body_style), Paragraph(f"{c_scores.get('academic_inquiry', 0)}점", body_style)],
+            [Paragraph("2. 교사의 직접 관찰 반영", body_style), Paragraph("15점", body_style), Paragraph(f"{c_scores.get('teacher_observation', 0)}점", body_style)],
+            [Paragraph("3. 교과목 심화 탐구 연계", body_style), Paragraph("15점", body_style), Paragraph(f"{c_scores.get('subject_connection', 0)}점", body_style)],
+            [Paragraph("4. 학생 간 복붙 기재 여부", body_style), Paragraph("10점", body_style), Paragraph(f"{c_scores.get('duplication', 0)}점", body_style)],
+            [Paragraph("5. AI 대필 / 문맥 어색함 검증", body_style), Paragraph("10점", body_style), Paragraph(f"{c_scores.get('ai_overuse', 0)}점", body_style)],
+            [Paragraph("6. 가독성 및 문장 구조", body_style), Paragraph("15점", body_style), Paragraph(f"{c_scores.get('readability', 0)}점", body_style)],
+            [Paragraph("7. 생기부 기재 금지 사항 준수", body_style), Paragraph("10점", body_style), Paragraph(f"{c_scores.get('prohibited_items', 0)}점", body_style)],
+            [Paragraph("8. 오탈자 검수", body_style), Paragraph("10점", body_style), Paragraph(f"{c_scores.get('typo_check', 0)}점", body_style)],
+            [Paragraph("<b>✨ 최종 동아리 작성 품질 총점</b>", body_style), Paragraph("<b>100점</b>", body_style), Paragraph(f"<b><font color='#EF4444'>{c_scores.get('total', 0)} / 100</font></b>", body_style)]
+        ]
+        t_score = Table(table_data, colWidths=[220, 100, 200])
+        t_score.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F3F4F6')),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')),
+            ('BACKGROUND', (0,9), (-1,9), colors.HexColor('#FEF2F2')),
+        ]))
+        story.append(t_score)
+        story.append(Spacer(1, 10))
+        
+        story.append(Paragraph("👩‍🏫 [동아리 특기사항 개선 피드백 리포트]", h1_style))
+        story.append(Paragraph(f"• <b>종합 총평:</b> {c_data.get('overall_summary', '')}", body_style))
+        story.append(Paragraph(f"• <b>기재 우수 사항:</b> {c_data.get('good_points', '')}", body_style))
+        story.append(Paragraph(f"• <b>보완 및 수정 필요사항:</b> {c_data.get('improvements', '')}", body_style))
+        story.append(Spacer(1, 4))
+        story.append(create_box(f"<b>✏️ 수정·보완 추천 문장 가이드:</b><br/>{c_data.get('revision_examples', '')}", '#FEF2F2', '#EF4444', '#991B1B'))
 
     # 2) 표준 생기부 리포트
     else:
@@ -501,7 +602,49 @@ if student_file and api_key:
                     }}
                     """
 
-                # [분기 2] 교사 전용 (동아리, 자율/진로, 행특, 종합) 피드백
+                # [분기 1-2] 동아리 특기사항 전용 피드백
+                elif selected_feedback_type == "동아리 특기사항 전용 피드백":
+                    prompt = f"""
+                    당신은 대학 입학사정관이자 동아리활동 작성 컨설팅 전문가입니다.
+                    제공된 [동아리 특기사항 텍스트]는 학생들의 동아리 활동 기재 모음입니다.
+                    교사가 자신이 작성한 동아리 기재 내용을 스스로 점검하고 개선할 수 있도록 아래 8가지 채점기준(100점 만점)에 맞춰 정밀 평가하세요.
+
+                    [동아리 교사 점검 채점기준 (100점 만점)]:
+                    1. 학생의 학문적 탐구 역량을 잘 보여주는 기록인가 (15점 만점)
+                    2. 교사의 관찰이 들어간 기록인가 (15점 만점)
+                    3. 학생이 이수한 교과목에서 심화 탐구한 내용이 들어갔는가 (15점 만점)
+                    4. 학생 간 복붙한 기록이 없는가 (10점 만점)
+                    5. AI를 너무 돌려 맥락에 맞지 않는 단어나 문장이 들어가지 않았는가 (10점 만점)
+                    6. 가독성이 높은가 (15점 만점)
+                    7. 생기부 기재 금지 사항이 잘 반영되어 있는가 (10점 만점)
+                    8. 오탈자가 없는가 (10점 만점)
+
+                    [업로드된 동아리 텍스트]:
+                    {student_text[:7000]}
+
+                    반드시 아래 지정된 순수 JSON 형식으로만 응답하세요 (마크다운 ```json 기호 절대 금지):
+                    {{
+                        "club_eval": {{
+                            "scores": {{
+                                "academic_inquiry": 13,
+                                "teacher_observation": 13,
+                                "subject_connection": 13,
+                                "duplication": 9,
+                                "ai_overuse": 9,
+                                "readability": 13,
+                                "prohibited_items": 10,
+                                "typo_check": 10,
+                                "total": 90
+                            }},
+                            "overall_summary": "동아리 특기사항에 대한 입학사정관 관점의 종합 평어",
+                            "good_points": "학문적 탐구 역량 및 교과 연계 심화 탐구가 돋보이는 우수 사례 분석",
+                            "improvements": "구체적 관찰 사실 부족, 복붙 표현, 금지사항 등 구체적 감점 및 보완점 사유",
+                            "revision_examples": "진부하거나 미흡한 문장을 2~3개 꼽고 교사 관찰 및 교과 연계 중심으로 어떻게 수정할지 '수정 전 ➔ 수정 후' 예시 작성"
+                        }}
+                    }}
+                    """
+
+                # [분기 2] 교사 전용 (기타 영역) 피드백
                 elif feedback_category == "교사전용 피드백 버전":
                     prompt = f"""
                     당신은 전국 대학부종합전형 서류를 평가하는 [{evaluator_mode}]입니다.
@@ -510,7 +653,7 @@ if student_file and api_key:
                     [핵심 평가 지침]:
                     1. 평가자 관점: '{evaluator_mode}' 특성 반영.
                     2. 학업(40점)/진로(40점)/공동체(20점) 총 100점 만점으로 점수를 매기세요.
-                    3. 선택된 피드백 영역('{selected_feedback_type}')에 집중하여 교사 관점의 장점, 보완점/감점 사유, 세특 원문 인용을 구체적으로 적으세요.
+                    3. 선택된 피드백 영역('{selected_feedback_type}')에 집중하여 교사 관점의 장점, 보완점/감점 사유를 구체적으로 적으세요.
 
                     [학생 제출 텍스트]:
                     {student_text[:7000]}
@@ -526,7 +669,7 @@ if student_file and api_key:
                         "teacher_feedback": {{
                             "category": "{selected_feedback_type}",
                             "strength": "{selected_feedback_type} 관점에서의 탁월한 장점 상세 서술",
-                            "weakness": "{selected_feedback_type} 관점에서의 보완점, 감점 사유, Bloom 단계 한계 및 AI 의심문장 지적",
+                            "weakness": "{selected_feedback_type} 관점에서의 보완점 및 감점 사유 지적",
                             "quote": "텍스트에서 실제 인용한 핵심 문장"
                         }}
                     }}
@@ -541,7 +684,7 @@ if student_file and api_key:
                     [핵심 평가 지침]:
                     1. 평가자 관점: '{evaluator_mode}' 특성 반영.
                     2. 학업(40점)/진로(40점)/공동체(20점) 총 100점 만점으로 점수를 산출하세요.
-                    3. 학생용 피드백: 헛된 희망을 주지 않는 입학사정관 관점의 냉정한 현재 위치 진단(지원 가능 대학 라인), 여태까지 했던 활동의 강점과 치명적 약점, 앞으로 3학년 및 다음 학기에 실행해야 할 구체적인 탐구 주제 및 활동 솔루션을 제시하세요.
+                    3. 학생용 피드백: 헛된 희망을 주지 않는 입학사정관 관점의 냉정한 현재 위치 진단(지원 가능 대학 라인), 활동 강점과 치명적 약점, 앞으로 실행해야 할 구체적인 탐구 주제 및 활동 솔루션을 제시하세요.
 
                     [학생 제출 텍스트]:
                     {student_text[:7000]}
@@ -558,7 +701,7 @@ if student_file and api_key:
                             "current_position": "입학사정관 관점 냉정한 현위치 진단 및 지원 가능 대학 라인",
                             "strength_analysis": "여태까지 한 활동의 핵심 강점 분석",
                             "weakness_analysis": "치명적인 약점 및 감점 요소 분석",
-                            "recommendation": "앞으로 3학년 및 다음 학기에 실행해야 할 구체적인 탐구 주제 및 과목 선택/활동 솔루션"
+                            "recommendation": "앞으로 실행해야 할 구체적인 탐구 주제 및 과목 선택/활동 솔루션"
                         }}
                     }}
                     """
@@ -579,7 +722,7 @@ if student_file and api_key:
                 except Exception as e:
                     st.error(f"평가 중 오류가 발생했습니다: {e}")
 
-# --- 8. 채점 결과 및 맞춤형 피드백 출력 구역 (요구사항 3, 4, 9) ---
+# --- 8. 채점 결과 및 맞춤형 피드백 출력 구역 ---
 if "eval_result" in st.session_state:
     res = st.session_state["eval_result"]
     fb_title = st.session_state.get("eval_mode_title", "")
@@ -613,6 +756,35 @@ if "eval_result" in st.session_state:
         st.success(f"**👍 기재 우수 사항:** {st_eval.get('good_points', '')}")
         st.warning(f"**⚠️ 보완 및 수정 필요사항:** {st_eval.get('improvements', '')}")
         st.error(f"**✏️ 수정·보완 추천 문장 예시:**\n\n{st_eval.get('revision_examples', '')}")
+
+    # 📌 동아리 교사 점검 모드 결과 출력
+    elif fb_title == "동아리 특기사항 전용 피드백" and "club_eval" in res:
+        c_eval = res["club_eval"]
+        c_scores = c_eval.get("scores", {})
+        
+        st.markdown(f"### 📊 동아리 특기사항 교사 기재 점검 표 (`{evaluator_mode}` 기준)")
+        st.metric("✨ 동아리 기재 품질 총점", f"{c_scores.get('total', 0)} / 100 점")
+        
+        st.divider()
+        st.markdown("#### 📋 8대 세부 점검 항목별 점수")
+        cc1, cc2, cc3, cc4 = st.columns(4)
+        cc1.metric("1. 학문적 탐구 역량", f"{c_scores.get('academic_inquiry', 0)} / 15점")
+        cc2.metric("2. 교사 직접 관찰", f"{c_scores.get('teacher_observation', 0)} / 15점")
+        cc3.metric("3. 교과 심화 연계", f"{c_scores.get('subject_connection', 0)} / 15점")
+        cc4.metric("4. 복붙 방지", f"{c_scores.get('duplication', 0)} / 10점")
+        
+        cc5, cc6, cc7, cc8 = st.columns(4)
+        cc5.metric("5. AI 오염 방지", f"{c_scores.get('ai_overuse', 0)} / 10점")
+        cc6.metric("6. 가독성", f"{c_scores.get('readability', 0)} / 15점")
+        cc7.metric("7. 기재금지 준수", f"{c_scores.get('prohibited_items', 0)} / 10점")
+        cc8.metric("8. 오탈자 검수", f"{c_scores.get('typo_check', 0)} / 10점")
+        
+        st.divider()
+        st.subheader("👩‍🏫 동아리 교사 자가점검 및 개선 피드백")
+        st.info(f"**📝 종합 총평:** {c_eval.get('overall_summary', '')}")
+        st.success(f"**👍 기재 우수 사항:** {c_eval.get('good_points', '')}")
+        st.warning(f"**⚠️ 보완 및 수정 필요사항:** {c_eval.get('improvements', '')}")
+        st.error(f"**✏️ 수정·보완 추천 문장 예시:**\n\n{c_eval.get('revision_examples', '')}")
 
     # 📌 표준 생기부 / 기타 교사 / 학생 피드백 출력
     else:
@@ -690,6 +862,14 @@ if "eval_result" in st.session_state:
             txt_content += f"[우수 사항]\n{st_eval.get('good_points', '')}\n\n"
             txt_content += f"[보완 및 수정 필요사항]\n{st_eval.get('improvements', '')}\n\n"
             txt_content += f"[수정 추천 문장 예시]\n{st_eval.get('revision_examples', '')}\n"
+        elif fb_title == "동아리 특기사항 전용 피드백" and "club_eval" in res:
+            c_eval = res["club_eval"]
+            c_sc = c_eval.get("scores", {})
+            txt_content += f"동아리 기재품질 점수: {c_sc.get('total', 0)} / 100\n\n"
+            txt_content += f"[종합 평어]\n{c_eval.get('overall_summary', '')}\n\n"
+            txt_content += f"[우수 사항]\n{c_eval.get('good_points', '')}\n\n"
+            txt_content += f"[보완 및 수정 필요사항]\n{c_eval.get('improvements', '')}\n\n"
+            txt_content += f"[수정 추천 문장 예시]\n{c_eval.get('revision_examples', '')}\n"
         else:
             scores = res.get("scores", {})
             txt_content += f"종합 점수: {scores.get('total', 0)} / 100\n"
