@@ -103,6 +103,36 @@ def get_korean_font_path():
         pass
     return None
 
+def normalize_feedback_text(text):
+    """AI 응답이 프롬프트 지시(줄바꿈 포함)를 따르지 않고 줄바꿈 없는 한 덩어리 문단으로
+    돌아오는 경우를 대비한 코드 단 안전장치. 이미 줄바꿈이 충분히 들어있어 잘 구조화된
+    텍스트는 그대로 두고, 그렇지 않은 경우에만 항목별 소제목/번호목록/수정 전·후 패턴
+    앞에 줄바꿈을 강제로 삽입하여 '기재 우수 사항'처럼 문단이 나뉘어 보이도록 보정한다."""
+    if not text:
+        return text
+    t = str(text)
+
+    lines = [ln for ln in t.split("\n") if ln.strip()]
+    avg_len = sum(len(ln) for ln in lines) / len(lines) if lines else 0
+    # 이미 충분히 여러 줄로 잘 구조화된 경우(평균 한 줄 길이가 짧음)에는 그대로 반환
+    if len(lines) >= 3 and avg_len < 150:
+        return t
+
+    # 1) [2번. 교사 관찰 결여] 형태의 항목 소제목 앞에 빈 줄 + 줄바꿈 삽입
+    t = re.sub(r"\s*(\[[^\[\]]{2,40}\])", r"\n\n\1", t)
+    # 2) "1. (과목명)" 또는 "1. (부원명)" 처럼 번호+괄호로 시작하는 문제 문장 항목 앞에 줄바꿈 삽입
+    t = re.sub(r"(?<!\n)\s*(\d{1,2}[\.\)]\s*\([^)]{1,25}\))", r"\n\1", t)
+    # 3) 괄호 태그 없이 "1. '문장'" 형태로 오는 번호 목록도 줄바꿈 삽입
+    t = re.sub(r"(?<!\n)\s*(\d{1,2}[\.\)]\s*['\"'])", r"\n\1", t)
+    # 4) "- 수정 전:" / "- 수정 후:" / "수정 전:" / "수정 후:" 앞에 줄바꿈 삽입
+    t = re.sub(r"\s*(-?\s*수정\s*(전|후)\s*[:：])", r"\n\1", t)
+    # 5) 문장 종결 따옴표(') 뒤에 공백 없이 바로 다음 번호 항목이 이어 붙는 경우 분리
+    t = re.sub(r"(['’」\)])\s*(?=\d{1,2}[\.\)])", r"\1\n", t)
+    # 6) 연속된 빈 줄은 최대 1개까지만 허용하도록 정리
+    t = re.sub(r"\n{3,}", "\n\n", t)
+
+    return t.strip()
+
 # --- 세션 상태 초기화 (초기 미선택 고정) ---
 if "feedback_main_cat" not in st.session_state:
     st.session_state["feedback_main_cat"] = "--- 피드백 대분류 선택 ---"
@@ -428,7 +458,17 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
 
     def markdown_to_flowables(text, text_hex):
         """AI가 생성한 마크다운풍 텍스트(번호목록/불릿/굵게)를 리포트랩 문단 리스트로 변환하여
-        PDF 안에서도 화면(st.markdown)과 동일하게 문단·목록이 구분되어 보이도록 처리"""
+        PDF 안에서도 화면(st.markdown)과 동일하게 문단·목록이 구분되어 보이도록 처리
+
+        [중요 - LayoutError 근본 방지책]
+        AI 응답에 줄바꿈(\\n)이 제대로 들어있지 않고 거대한 한 덩어리 문단으로 오는 경우가 있다.
+        이 경우 문단 1개가 그대로 표의 행(row) 1개가 되어, 페이지 한 장보다 길면 다시 LayoutError가 난다.
+        따라서 텍스트의 줄바꿈 여부와 무관하게, 일정 글자 수(MAX_CHARS)를 넘는 덩어리는
+        공백 단위로 강제로 잘게 쪼개어 여러 개의 짧은 문단(=여러 행)으로 만든다.
+        이렇게 하면 어떤 경우에도 개별 행이 한 페이지보다 커질 수 없다.
+        """
+        MAX_CHARS = 220
+
         if not text:
             return [Paragraph("-", ParagraphStyle(
                 'mdEmpty', fontName=font_name, fontSize=7.5, leading=10.5,
@@ -439,6 +479,10 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
             'mdNormal', fontName=font_name, fontSize=7.5, leading=11,
             textColor=colors.HexColor(text_hex), spaceAfter=5
         )
+        continuation_style = ParagraphStyle(
+            'mdContinuation', fontName=font_name, fontSize=7.5, leading=11,
+            textColor=colors.HexColor(text_hex), leftIndent=10, spaceAfter=5
+        )
         section_style = ParagraphStyle(
             'mdSection', fontName=font_name, fontSize=8.3, leading=11.5,
             textColor=colors.HexColor(text_hex), spaceBefore=9, spaceAfter=4
@@ -447,14 +491,64 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
             'mdNumbered', fontName=font_name, fontSize=7.8, leading=11.2,
             textColor=colors.HexColor(text_hex), spaceBefore=7, spaceAfter=2
         )
+        numbered_continuation_style = ParagraphStyle(
+            'mdNumberedContinuation', fontName=font_name, fontSize=7.8, leading=11.2,
+            textColor=colors.HexColor(text_hex), leftIndent=12, spaceAfter=2
+        )
         bullet_style = ParagraphStyle(
             'mdBullet', fontName=font_name, fontSize=7.5, leading=10.8,
             textColor=colors.HexColor(text_hex), leftIndent=16, spaceAfter=4
+        )
+        bullet_continuation_style = ParagraphStyle(
+            'mdBulletContinuation', fontName=font_name, fontSize=7.5, leading=10.8,
+            textColor=colors.HexColor(text_hex), leftIndent=26, spaceAfter=4
         )
         sub_bullet_style = ParagraphStyle(
             'mdSubBullet', fontName=font_name, fontSize=7.3, leading=10.5,
             textColor=colors.HexColor(text_hex), leftIndent=30, spaceAfter=4
         )
+
+        def chunk_long_text(raw, max_chars=MAX_CHARS):
+            """공백 단위로 텍스트를 max_chars 이하 조각으로 강제 분할.
+            공백이 전혀 없는 비정상적으로 긴 토큰(예: 끊어지지 않는 긴 문자열)도
+            안전하게 강제 슬라이싱하여 절대 max_chars*2를 넘지 않도록 보장한다."""
+            raw = raw.strip()
+            if not raw:
+                return []
+            if len(raw) <= max_chars:
+                return [raw]
+
+            words = raw.split(" ")
+            chunks, current = [], ""
+            for w in words:
+                # 공백이 없는 단일 토큰 자체가 너무 길면 강제로 잘라냄
+                while len(w) > max_chars:
+                    if current:
+                        chunks.append(current)
+                        current = ""
+                    chunks.append(w[:max_chars])
+                    w = w[max_chars:]
+                candidate = f"{current} {w}".strip() if current else w
+                if len(candidate) > max_chars and current:
+                    chunks.append(current)
+                    current = w
+                else:
+                    current = candidate
+            if current:
+                chunks.append(current)
+            return chunks
+
+        def emit(raw_content, prefix, first_style, continuation_style_):
+            """prefix(번호/불릿 등)는 첫 조각에만 붙이고, 나머지 조각은 이어지는 문단으로 처리"""
+            chunks = chunk_long_text(raw_content)
+            if not chunks:
+                return
+            for idx, chunk in enumerate(chunks):
+                chunk_fmt = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", chunk)
+                if idx == 0:
+                    flowables.append(Paragraph(f"{prefix}{chunk_fmt}", first_style))
+                else:
+                    flowables.append(Paragraph(chunk_fmt, continuation_style_))
 
         flowables = []
         for raw_line in str(text).split("\n"):
@@ -467,26 +561,23 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
             m_section = re.match(r"^\**\[(.+?)\]\**\s*(.*)", line)
             if m_section:
                 title_fmt = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", m_section.group(1))
-                remainder_fmt = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", m_section.group(2))
                 flowables.append(Paragraph(f"▍<b>{title_fmt}</b>", section_style))
-                if remainder_fmt:
-                    flowables.append(Paragraph(remainder_fmt, normal_style))
+                if m_section.group(2):
+                    emit(m_section.group(2), "", normal_style, continuation_style)
                 continue
 
-            # 마크다운 굵게(**텍스트**) -> <b>텍스트</b>
-            line_fmt = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", line)
-
-            m_num = re.match(r"^(\d+)[\.\)]\s+(.*)", line_fmt)
-            m_bullet = re.match(r"^[-•*○ㅇ]\s+(.*)", line_fmt)
+            m_num = re.match(r"^(\d+)[\.\)]\s+(.*)", line)
+            m_bullet = re.match(r"^[-•*○ㅇ]\s+(.*)", line)
 
             if m_num:
-                flowables.append(Paragraph(f"<b>{m_num.group(1)}.</b> {m_num.group(2)}", numbered_style))
+                emit(m_num.group(2), f"<b>{m_num.group(1)}.</b> ", numbered_style, numbered_continuation_style)
             elif m_bullet:
                 style = sub_bullet_style if leading_spaces >= 2 else bullet_style
-                flowables.append(Paragraph(f"• {m_bullet.group(1)}", style))
+                emit(m_bullet.group(1), "• ", style, bullet_continuation_style)
             else:
-                flowables.append(Paragraph(line_fmt, normal_style))
+                emit(line, "", normal_style, continuation_style)
         return flowables
+
 
     def create_feedback_box(title, text, bg_hex, border_hex, text_hex):
         """제목 + 좌측 컬러 포인트 바 + 문단/목록이 구분된 피드백 카드를 생성
@@ -737,6 +828,14 @@ if student_file and api_key:
                     - 같은 항목·같은 유형 안에서 문제의 원인(왜 감점되는지)이 동일한 문장이 여러 개 발견되면, 문장마다 설명을 반복하지 말고 다음과 같이 그룹으로 묶어 요약하세요: 먼저 그 문제 유형과 이유를 한 번만 설명한 뒤, "다음 N개 문장에서 동일한 문제가 발견됨:" 형식으로 해당하는 모든 문장을 원문 그대로 나열하세요(문장마다 과목명 표기). 반대로 원인이 서로 다르면 각각 별도 항목으로 분리해서 설명하세요.
                     - revision_examples 역시 improvements에서 지적한 "모든" 문제 문장에 대해 빠짐없이 수정 전/후 예시를 제공하는 것이 원칙입니다. 다만 완전히 동일한 패턴(동일 원인)으로 그룹핑된 문장들은, 그중 1개 문장에 대해서만 상세한 '수정 전 ➔ 수정 후' 예시를 보여주고, 나머지 문장들은 "동일 유형이므로 같은 방식으로 수정 가능한 문장: 문장A, 문장B" 형태로 간략히 나열하는 방식으로 처리하세요. (문제 진단은 전수로, 수정 예시 시연은 그룹당 대표 1개로)
 
+                    [출력 형식 규정 - 줄바꿈 필수, 절대 한 덩어리 문단 금지]:
+                    - improvements와 revision_examples(그리고 good_points도 동일)는 절대로 줄바꿈 없이 이어붙인 하나의 거대한 문단으로 작성하지 마세요. JSON 문자열 값 안에 실제 줄바꿈 문자(\\n)를 반드시 포함시켜, 아래 구조를 지키세요:
+                      1) 항목 소제목 "[2번. 교사 관찰 결여]" 등은 반드시 그 앞뒤로 줄바꿈을 넣어 독립된 한 줄로 작성
+                      2) 그룹 설명 문장("다음 N개 문장에서 동일한 문제가 발견됨:")도 독립된 한 줄로 작성
+                      3) 그 아래 나열하는 문제 문장들은 "1. (과목명/학생) '문장'" 처럼 각각 번호를 매겨 한 줄에 하나씩 줄바꿈으로 구분하여 작성 (하나의 줄에 여러 문장을 쉼표로 이어붙이지 말 것)
+                      4) 서로 다른 항목([2번]과 [4번] 등) 사이에는 빈 줄을 하나 넣어 시각적으로 구분
+                    - 즉, 아래 JSON 예시의 "improvements" 필드처럼 소제목-설명-번호목록이 줄 단위로 명확히 나뉜 멀티라인 문자열로 응답해야 하며, 세부 항목이 없는 good_points 역시 우수 사례를 문장별로 줄바꿈하여 나열하는 형식을 동일하게 따르세요.
+
                     [1~3번 항목: 근거 기반 촘촘한 피드백 원칙]:
                     - 1번(교과적 역량), 2번(교사 관찰), 3번(교과 역량) 항목은 두루뭉술한 총평이 아니라, 반드시 학생부 원문에서 실제 문장(또는 핵심 구절)을 최소 1개 이상 직접 인용하여 "왜 이 문장이 해당 항목을 충족/미충족하는지"를 구체적으로 짚어내세요.
                     - 단순히 "잘 드러남" 수준이 아니라, 어떤 개념적 깊이, 어떤 관찰 행동, 어떤 교과 고유의 사고방식이 어느 문장에서 드러나는지 문장 단위로 근거를 제시하세요.
@@ -786,9 +885,9 @@ if student_file and api_key:
                                 "total": 86
                             }},
                             "overall_summary": "수학, 영어, 통합사/과 등 과세특 기재 내용에 대한 입학사정관 관점의 팩트 기반 종합 평어",
-                            "good_points": "1~3번 항목 기준, 원문 문장을 직접 인용하며 어떤 지점에서 교과 역량·교사 관찰·교과 사고방식이 잘 드러났는지 촘촘하게 짚은 분석 (2번 교사 관찰 항목은 단순 활동/발표 사실 나열 문장이 아니라 그 활동에 대한 교사의 정성적 평가·해석이 담긴 문장만을 우수 사례로 인용할 것)",
-                            "improvements": "[2번. 교사 관찰 결여], [4번. 복붙 의심], [5번. AI 어색함/거대 담론], [6-a. 수식어구 중첩], [6-b. 주술 호응 불일치], [6-c. 목적어 누락], [6-d. 문장 과다 길이] 등 항목별 소제목으로 구조화하여, 위 [전수 점검 및 그룹핑 원칙]에 따라 해당 세특 전체에서 발견되는 '모든' 문제 문장을 과목명과 함께 번호 매겨 나열하고, 원인이 같은 문장들은 그룹으로 묶어 한 번만 설명한 뒤 문장 목록을 이어붙일 것 (단, '-습니다'체로 고치라는 피드백은 절대 포함하지 말 것)",
-                            "revision_examples": "improvements에서 항목별로 정리한 문제 문장 그룹마다, 대표 문장 1개는 상세한 '수정 전 ➔ 수정 후' 예시(명사형 종결 유지)를 제시하고, 같은 그룹의 나머지 문장은 '동일 유형이므로 같은 방식으로 수정 가능' 형태로 간략히 나열하는 방식으로 항목별 소제목 구조를 유지하여 작성"
+                            "good_points": "1. (수학) '이차함수의 최댓값을 구하는 과정에서 판별식을 적용하여 풀이 과정을 논리적으로 서술함' — 개념 적용의 정확성이 돋보임\\n2. (통합과학) '실험 중 변인 통제의 필요성을 스스로 제기함' — 교사의 관찰과 평가가 함께 담긴 문장",
+                            "improvements": "▍[2번. 교사 관찰 결여]\\n다음 2개 문장에서 활동 사실만 나열되고 교사의 평가·해석이 결여됨:\\n1. (수학) '이차함수 그래프를 그려 발표함.'\\n2. (영어) '팀 프로젝트에 참여함.'\\n\\n▍[6-a. 수식어구 중첩]\\n다음 2개 문장에서 수식어가 과도하게 중첩되어 핵심 내용이 바로 읽히지 않음:\\n1. (음악) '창작 과정에서 랩을 작사하는 것에 어려움을 겪기도 했으나, 모둠원들과 다각도로 아이디어를 나누고 다양한 힙합 곡들을 탐색 및 분석하여 완성도 높은 수준의 곡을 완성해 냄.'\\n2. (음악) '팀원 간 의견 조율이 필요한 상황마다 특유의 리더십과 매끄러운 진행 능력으로 분위기를 유연하게 풀어나갔으며, 가사의 분위기와 조화를 이루는 최적의 비트를 찾음.'\\n\\n(실제 응답에서는 위와 같은 형식으로 [2번]~[6-d]까지 해당되는 모든 항목을, 발견되는 모든 문제 문장을 빠짐없이 담아 작성할 것. 절대 줄바꿈 없이 이어붙이지 말 것. 단, '-습니다'체로 고치라는 피드백은 절대 포함하지 말 것)",
+                            "revision_examples": "▍[2번. 교사 관찰 결여]\\n- 수정 전: '이차함수 그래프를 그려 발표함.'\\n- 수정 후: '이차함수 그래프를 그려 발표하며 그래프의 대칭성과 함수식의 관계를 스스로 도출해내는 논리적 사고력을 보임.'\\n- 동일 유형이므로 같은 방식으로 수정 가능한 문장: '팀 프로젝트에 참여함.'\\n\\n▍[6-a. 수식어구 중첩]\\n- 수정 전: '창작 과정에서 랩을 작사하는 것에 어려움을 겪기도 했으나, 모둠원들과 다각도로 아이디어를 나누고 다양한 힙합 곡들을 탐색 및 분석하여 완성도 높은 수준의 곡을 완성해 냄.'\\n- 수정 후: '창작 과정에서 랩 작사에 어려움을 겪음. 이에 모둠원들과 다각도로 아이디어를 나누고 다양한 힙합 곡들을 탐색 및 분석하며 완성도 높은 곡을 완성하는 모습을 보임.'\\n\\n(improvements에서 정리한 모든 항목·모든 그룹에 대해 위와 같은 형식으로 빠짐없이 이어서 작성할 것)"
                         }}
                     }}
                     """
@@ -816,6 +915,9 @@ if student_file and api_key:
                     - improvements와 revision_examples는 [2번. 관찰 결여], [4번. 복붙 의심], [5번. AI 어색함], [6번. 가독성], [8번. 오탈자] 등 항목별 소제목으로 구조화하고, 그 아래 해당 유형에 걸리는 모든 문제 문장을 번호를 매겨 나열하세요.
                     - 같은 항목·같은 원인으로 여러 문장이 걸릴 경우, 문장마다 반복 설명하지 말고 원인을 한 번만 설명한 뒤 "다음 N개 문장에서 동일한 문제가 발견됨:" 형식으로 해당 문장들을 나열하세요.
                     - revision_examples는 각 문제 그룹의 대표 문장 1개에 대해 상세한 '수정 전 ➔ 수정 후' 예시를 제시하고, 같은 그룹의 나머지 문장은 "동일 유형이므로 같은 방식으로 수정 가능" 형태로 간략히 안내하세요.
+
+                    [출력 형식 규정 - 줄바꿈 필수, 절대 한 덩어리 문단 금지]:
+                    - good_points, improvements, revision_examples 모두 줄바꿈 없이 이어붙인 하나의 거대한 문단으로 작성하지 마세요. JSON 문자열 값 안에 실제 줄바꿈 문자(\\n)를 반드시 포함시켜, 항목 소제목("[2번. 관찰 결여]" 등)은 독립된 한 줄로, 그룹 설명 문장도 독립된 한 줄로, 그 아래 문제 문장들은 "1. (부원명/역할) '문장'" 형태로 한 줄에 하나씩 나열하세요. 서로 다른 항목 사이에는 빈 줄을 하나 넣어 구분하세요.
 
                     [동아리 교사 점검 채점기준 (100점 만점)]:
                     1. 학생의 학문적 탐구 역량을 잘 보여주는 기록인가 (15점 만점)
@@ -845,9 +947,9 @@ if student_file and api_key:
                                 "total": 90
                             }},
                             "overall_summary": "동아리 특기사항에 대한 입학사정관 관점의 팩트 기반 종합 평어",
-                            "good_points": "학문적 탐구 역량 및 교과 연계 심화 탐구가 돋보이는 우수 사례 분석 (2번 교사 관찰 항목은 단순 활동/발표 사실 나열이 아니라 교사의 정성적 평가·해석이 담긴 문장만 인용할 것)",
-                            "improvements": "[2번. 관찰 결여], [4번. 복붙 의심], [5번. AI 어색함], [6번. 가독성], [8번. 오탈자] 등 항목별 소제목으로 구조화하여, 위 [전수 점검 및 그룹핑 원칙]에 따라 텍스트 전체에서 발견되는 모든 문제 문장을 번호 매겨 나열하고, 원인이 같은 문장은 그룹으로 묶어 요약할 것 (단, '-습니다'체로 고치라는 피드백은 절대 포함하지 말 것)",
-                            "revision_examples": "improvements에서 항목별로 정리한 문제 문장 그룹마다 대표 문장 1개는 상세한 '수정 전 ➔ 수정 후' 예시(명사형 종결 유지)를 제시하고, 나머지 그룹 내 문장은 간략히 나열하는 방식으로 항목별 구조를 유지하여 작성"
+                            "good_points": "1. (김OO) '토론 진행 중 상반된 의견을 정리하여 절충안을 제시함' — 리더십과 조율 능력에 대한 교사의 평가가 담긴 문장\\n2. (이OO) '데이터 분석 결과의 한계를 스스로 지적함' — 비판적 사고에 대한 관찰이 드러남",
+                            "improvements": "▍[2번. 관찰 결여]\\n다음 2개 문장에서 활동 사실만 나열되고 교사의 평가·해석이 결여됨:\\n1. (박OO) '토론에 참여함.'\\n2. (최OO) '보고서를 작성함.'\\n\\n▍[6번. 가독성]\\n다음 문장에서 수식어가 과도하게 중첩되어 가독성이 저하됨:\\n1. (정OO) '팀원 간 의견 조율이 필요한 상황마다 특유의 리더십과 매끄러운 진행 능력으로 분위기를 유연하게 풀어나갔으며, 가사의 분위기와 조화를 이루는 최적의 비트를 찾음.'\\n\\n(실제 응답에서는 위와 같은 형식으로 해당되는 모든 항목에 대해, 발견되는 모든 문제 문장을 빠짐없이 담아 작성할 것. 단, '-습니다'체로 고치라는 피드백은 절대 포함하지 말 것)",
+                            "revision_examples": "▍[2번. 관찰 결여]\\n- 수정 전: '토론에 참여함.'\\n- 수정 후: '토론에 참여하여 상반된 의견 사이에서 절충안을 제시하는 조율 능력을 보임.'\\n- 동일 유형이므로 같은 방식으로 수정 가능한 문장: '보고서를 작성함.'\\n\\n(improvements에서 정리한 모든 항목·모든 그룹에 대해 위와 같은 형식으로 빠짐없이 이어서 작성할 것)"
                         }}
                     }}
                     """
@@ -930,7 +1032,22 @@ if student_file and api_key:
                     response = model.generate_content(prompt)
                     cleaned = response.text.strip().replace("```json", "").replace("```", "").strip()
                     result_json = json.loads(cleaned)
-                    
+
+                    # AI가 줄바꿈 없는 한 덩어리 문단으로 응답하는 경우를 대비한 코드 단 정규화
+                    _TEXT_FIELDS = ["overall_summary", "good_points", "improvements", "revision_examples",
+                                     "strength", "weakness", "quote",
+                                     "current_position", "strength_analysis", "weakness_analysis", "recommendation"]
+                    for _outer_key in ("setuk_eval", "club_eval"):
+                        if _outer_key in result_json and isinstance(result_json[_outer_key], dict):
+                            for _field in _TEXT_FIELDS:
+                                if _field in result_json[_outer_key]:
+                                    result_json[_outer_key][_field] = normalize_feedback_text(result_json[_outer_key][_field])
+                    for _sub_key in ("teacher_feedback", "student_feedback"):
+                        if _sub_key in result_json and isinstance(result_json[_sub_key], dict):
+                            for _field in _TEXT_FIELDS:
+                                if _field in result_json[_sub_key]:
+                                    result_json[_sub_key][_field] = normalize_feedback_text(result_json[_sub_key][_field])
+
                     st.session_state["eval_result"] = result_json
                     st.session_state["evaluated_filename"] = student_file.name
                     st.session_state["eval_mode_title"] = selected_feedback_type
