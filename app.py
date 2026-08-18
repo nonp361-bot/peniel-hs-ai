@@ -3,6 +3,7 @@ import google.generativeai as genai
 import pypdf
 import json
 import os
+import re
 import urllib.request
 from io import BytesIO
 
@@ -425,6 +426,73 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
         ]))
         return t
 
+    def markdown_to_flowables(text, text_hex):
+        """AI가 생성한 마크다운풍 텍스트(번호목록/불릿/굵게)를 리포트랩 문단 리스트로 변환하여
+        PDF 안에서도 화면(st.markdown)과 동일하게 문단·목록이 구분되어 보이도록 처리"""
+        if not text:
+            return [Paragraph("-", ParagraphStyle(
+                'mdEmpty', fontName=font_name, fontSize=7.5, leading=10.5,
+                textColor=colors.HexColor(text_hex)
+            ))]
+
+        normal_style = ParagraphStyle(
+            'mdNormal', fontName=font_name, fontSize=7.5, leading=11,
+            textColor=colors.HexColor(text_hex), spaceAfter=5
+        )
+        numbered_style = ParagraphStyle(
+            'mdNumbered', fontName=font_name, fontSize=7.8, leading=11.2,
+            textColor=colors.HexColor(text_hex), spaceBefore=7, spaceAfter=2
+        )
+        bullet_style = ParagraphStyle(
+            'mdBullet', fontName=font_name, fontSize=7.5, leading=10.8,
+            textColor=colors.HexColor(text_hex), leftIndent=16, spaceAfter=4
+        )
+        sub_bullet_style = ParagraphStyle(
+            'mdSubBullet', fontName=font_name, fontSize=7.3, leading=10.5,
+            textColor=colors.HexColor(text_hex), leftIndent=30, spaceAfter=4
+        )
+
+        flowables = []
+        for raw_line in str(text).split("\n"):
+            line = raw_line.strip()
+            if not line:
+                continue
+            leading_spaces = len(raw_line) - len(raw_line.lstrip(" "))
+            # 마크다운 굵게(**텍스트**) -> <b>텍스트</b>
+            line_fmt = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", line)
+
+            m_num = re.match(r"^(\d+)[\.\)]\s+(.*)", line_fmt)
+            m_bullet = re.match(r"^[-•*○ㅇ]\s+(.*)", line_fmt)
+
+            if m_num:
+                flowables.append(Paragraph(f"<b>{m_num.group(1)}.</b> {m_num.group(2)}", numbered_style))
+            elif m_bullet:
+                style = sub_bullet_style if leading_spaces >= 2 else bullet_style
+                flowables.append(Paragraph(f"• {m_bullet.group(1)}", style))
+            else:
+                flowables.append(Paragraph(line_fmt, normal_style))
+        return flowables
+
+    def create_feedback_box(title, text, bg_hex, border_hex, text_hex):
+        """제목 + 좌측 컬러 포인트 바 + 문단/목록이 구분된 피드백 카드를 생성
+        (사이트의 st.info/success/warning/error 색상 구분을 PDF에서도 동일하게 재현)"""
+        title_style = ParagraphStyle(
+            'BoxTitle', fontName=font_name, fontSize=9, leading=12,
+            textColor=colors.HexColor(text_hex), spaceAfter=5
+        )
+        cell_content = [Paragraph(f"<b>{title}</b>", title_style)]
+        cell_content.extend(markdown_to_flowables(text, text_hex))
+
+        t = Table([[cell_content]], colWidths=[520])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(bg_hex)),
+            ('BOX', (0, 0), (-1, -1), 0.75, colors.HexColor(border_hex)),
+            ('LINEBEFORE', (0, 0), (0, -1), 3, colors.HexColor(border_hex)),
+            ('TOPPADDING', (0, 0), (-1, -1), 7), ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
+            ('LEFTPADDING', (0, 0), (-1, -1), 10), ('RIGHTPADDING', (0, 0), (-1, -1), 9),
+        ]))
+        return t
+
     story = []
     story.append(Paragraph(f"🎓 브니엘고 AI 생기부 평가 리포트 ({mode})", title_style))
     story.append(Paragraph(f"대상 파일: {student_filename}  |  평가 모드: {fb_type}", subtitle_style))
@@ -449,11 +517,14 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
         story.append(t_score)
         story.append(Spacer(1, 10))
         story.append(Paragraph("👩‍🏫 [과세특 개선 피드백 리포트]", h1_style))
-        story.append(Paragraph(f"• <b>종합 총평:</b> {st_data.get('overall_summary', '')}", body_style))
-        story.append(Paragraph(f"• <b>기재 우수 사항:</b> {st_data.get('good_points', '')}", body_style))
-        story.append(Paragraph(f"• <b>보완 및 수정 필요사항:</b> {st_data.get('improvements', '')}", body_style))
-        story.append(Spacer(1, 4))
-        story.append(create_box(f"<b>✏️ 수정·보완 추천 문장 가이드:</b><br/>{st_data.get('revision_examples', '')}", '#FEF2F2', '#EF4444', '#991B1B'))
+        story.append(Spacer(1, 3))
+        story.append(create_feedback_box("📝 종합 총평", st_data.get('overall_summary', ''), '#EFF6FF', '#3B82F6', '#1E3A8A'))
+        story.append(Spacer(1, 7))
+        story.append(create_feedback_box("👍 기재 우수 사항", st_data.get('good_points', ''), '#F0FDF4', '#22C55E', '#14532D'))
+        story.append(Spacer(1, 7))
+        story.append(create_feedback_box("⚠️ 보완 및 수정 필요사항", st_data.get('improvements', ''), '#FFFBEB', '#F59E0B', '#78350F'))
+        story.append(Spacer(1, 7))
+        story.append(create_feedback_box("✏️ 수정·보완 추천 문장 예시", st_data.get('revision_examples', ''), '#FEF2F2', '#EF4444', '#991B1B'))
     elif fb_type == "동아리 특기사항 전용 피드백" and "club_eval" in eval_data:
         c_data = eval_data["club_eval"]
         c_scores = c_data.get("scores", {})
@@ -474,11 +545,14 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
         story.append(t_score)
         story.append(Spacer(1, 10))
         story.append(Paragraph("👩‍🏫 [동아리 특기사항 개선 피드백 리포트]", h1_style))
-        story.append(Paragraph(f"• <b>종합 총평:</b> {c_data.get('overall_summary', '')}", body_style))
-        story.append(Paragraph(f"• <b>기재 우수 사항:</b> {c_data.get('good_points', '')}", body_style))
-        story.append(Paragraph(f"• <b>보완 및 수정 필요사항:</b> {c_data.get('improvements', '')}", body_style))
-        story.append(Spacer(1, 4))
-        story.append(create_box(f"<b>✏️ 수정·보완 추천 문장 가이드:</b><br/>{c_data.get('revision_examples', '')}", '#FEF2F2', '#EF4444', '#991B1B'))
+        story.append(Spacer(1, 3))
+        story.append(create_feedback_box("📝 종합 총평", c_data.get('overall_summary', ''), '#EFF6FF', '#3B82F6', '#1E3A8A'))
+        story.append(Spacer(1, 7))
+        story.append(create_feedback_box("👍 기재 우수 사항", c_data.get('good_points', ''), '#F0FDF4', '#22C55E', '#14532D'))
+        story.append(Spacer(1, 7))
+        story.append(create_feedback_box("⚠️ 보완 및 수정 필요사항", c_data.get('improvements', ''), '#FFFBEB', '#F59E0B', '#78350F'))
+        story.append(Spacer(1, 7))
+        story.append(create_feedback_box("✏️ 수정·보완 추천 문장 예시", c_data.get('revision_examples', ''), '#FEF2F2', '#EF4444', '#991B1B'))
     else:
         scores = eval_data.get("scores", {})
         table_data = [
@@ -494,22 +568,25 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
         story.append(Spacer(1, 10))
         if "teacher_feedback" in eval_data:
             story.append(Paragraph(f"👩‍🏫 [교사전용 정밀 피드백: {fb_type}]", h1_style))
+            story.append(Spacer(1, 3))
             tf = eval_data["teacher_feedback"]
-            story.append(Paragraph(f"• <b>👍 장점 분석:</b> {tf.get('strength', '')}", body_style))
-            story.append(Paragraph(f"• <b>⚠️ 보완점 및 감점 원인:</b> {tf.get('weakness', '')}", body_style))
+            story.append(create_feedback_box("👍 장점 분석", tf.get('strength', ''), '#F0FDF4', '#22C55E', '#14532D'))
+            story.append(Spacer(1, 7))
+            story.append(create_feedback_box("⚠️ 보완점 및 감점 원인", tf.get('weakness', ''), '#FFFBEB', '#F59E0B', '#78350F'))
             if tf.get('quote'):
-                story.append(create_box(f"<b>🎯 원문 인용 근거:</b> \"{tf['quote']}\"", '#FEF3C7', '#F59E0B', '#451A03'))
+                story.append(Spacer(1, 7))
+                story.append(create_feedback_box("🎯 원문 인용 근거", f"\"{tf['quote']}\"", '#FEF3C7', '#F59E0B', '#451A03'))
         if "student_feedback" in eval_data:
             story.append(Paragraph("🎓 [학생전용 현위치 진단 & 솔루션]", h1_style))
+            story.append(Spacer(1, 3))
             sf = eval_data["student_feedback"]
-            story.append(Paragraph("<b>1. 입학사정관 관점 냉정한 현위치 진단 (지원 가능 대학 라인)</b>", body_style))
-            story.append(create_box(sf.get("current_position", ""), '#F3F4F6', '#9CA3AF', '#111827'))
-            story.append(Spacer(1, 4))
-            story.append(Paragraph(f"• <b>강점:</b> {sf.get('strength_analysis', '')}", body_style))
-            story.append(Paragraph(f"• <b>치명적 약점:</b> {sf.get('weakness_analysis', '')}", body_style))
-            story.append(Spacer(1, 4))
-            story.append(Paragraph("<b>2. 향후 보완 추천 활동 및 구체적 탐구 주제 솔루션</b>", body_style))
-            story.append(create_box(sf.get("recommendation", ""), '#FEF2F2', '#EF4444', '#991B1B'))
+            story.append(create_feedback_box("🔍 입학사정관 관점 냉정한 현위치 진단 (지원 가능 대학 라인)", sf.get("current_position", ""), '#F3F4F6', '#9CA3AF', '#111827'))
+            story.append(Spacer(1, 7))
+            story.append(create_feedback_box("👍 기존 활동의 주요 강점", sf.get('strength_analysis', ''), '#F0FDF4', '#22C55E', '#14532D'))
+            story.append(Spacer(1, 7))
+            story.append(create_feedback_box("🚨 치명적인 약점 및 감점 요소", sf.get('weakness_analysis', ''), '#FFFBEB', '#F59E0B', '#78350F'))
+            story.append(Spacer(1, 7))
+            story.append(create_feedback_box("🚀 향후 보완 추천 활동 및 구체적 탐구 주제 솔루션", sf.get("recommendation", ""), '#FEF2F2', '#EF4444', '#991B1B'))
         
     doc.build(story)
     pdf_bytes = buffer.getvalue()
