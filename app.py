@@ -490,22 +490,38 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
 
     def create_feedback_box(title, text, bg_hex, border_hex, text_hex):
         """제목 + 좌측 컬러 포인트 바 + 문단/목록이 구분된 피드백 카드를 생성
-        (사이트의 st.info/success/warning/error 색상 구분을 PDF에서도 동일하게 재현)"""
+        (사이트의 st.info/success/warning/error 색상 구분을 PDF에서도 동일하게 재현)
+
+        [중요] 문단 리스트를 표 셀 하나에 몰아넣지 않고, '문단 1개 = 표의 행(row) 1개'
+        구조로 만들어야 ReportLab이 페이지 경계에서 행 단위로 자연스럽게 쪼갤 수 있다.
+        (전수 점검 기능으로 피드백 분량이 길어지면서, 셀 하나에 내용을 몰아넣던 기존 방식은
+        한 페이지 높이를 넘는 순간 LayoutError가 발생했음 — 이를 근본적으로 해결하기 위한 구조)
+        """
         title_style = ParagraphStyle(
             'BoxTitle', fontName=font_name, fontSize=9, leading=12,
-            textColor=colors.HexColor(text_hex), spaceAfter=5
+            textColor=colors.HexColor(text_hex), spaceAfter=0
         )
-        cell_content = [Paragraph(f"<b>{title}</b>", title_style)]
-        cell_content.extend(markdown_to_flowables(text, text_hex))
+        body_flowables = markdown_to_flowables(text, text_hex)
 
-        t = Table([[cell_content]], colWidths=[520])
-        t.setStyle(TableStyle([
+        rows = [[Paragraph(f"<b>{title}</b>", title_style)]]
+        for fl in body_flowables:
+            rows.append([fl])
+
+        t = Table(rows, colWidths=[520])
+        style_cmds = [
             ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(bg_hex)),
             ('BOX', (0, 0), (-1, -1), 0.75, colors.HexColor(border_hex)),
             ('LINEBEFORE', (0, 0), (0, -1), 3, colors.HexColor(border_hex)),
-            ('TOPPADDING', (0, 0), (-1, -1), 7), ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
+            ('TOPPADDING', (0, 0), (-1, -1), 1.5), ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
             ('LEFTPADDING', (0, 0), (-1, -1), 10), ('RIGHTPADDING', (0, 0), (-1, -1), 9),
-        ]))
+            # 제목 행 상단 여백, 마지막 행 하단 여백만 넉넉하게
+            ('TOPPADDING', (0, 0), (0, 0), 7),
+            ('BOTTOMPADDING', (0, -1), (0, -1), 7),
+        ]
+        t.setStyle(TableStyle(style_cmds))
+        # 표가 페이지 경계에서 행 단위로 자연스럽게 분할되도록 명시적으로 허용
+        t.splitByRow = 1
+        t.hAlign = 'LEFT'
         return t
 
     story = []
