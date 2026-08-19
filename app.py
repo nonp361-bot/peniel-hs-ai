@@ -271,7 +271,7 @@ elif feedback_category == "학생용 피드백 버전":
 st.sidebar.divider()
 
 # 4-3. API 키 설정
-api_key = ""
+api_key = "AQ.Ab8RN6LG4wMEGv9UdwTHANAaM4pSUhmEAZUwbnF6e3KAy8qZXQ"
 if os.path.exists("api_key.txt"):
     try:
         with open("api_key.txt", "r", encoding="utf-8") as f:
@@ -296,7 +296,7 @@ st.sidebar.divider()
 # 4-4. 모델 선택
 model_option = st.sidebar.selectbox(
     "🤖 Gemini AI 모델 선택",
-    ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
+    ["gemini-1.5-flash", "gemini-1.5-pro"],
     index=0,
     key="model_option_select"
 )
