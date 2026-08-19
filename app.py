@@ -1109,7 +1109,7 @@ if student_file and api_key:
                     """
 
                 try:
-                    model = genai.GenerativeModel(model_option)
+                    model = genai.GenerativeModel("gemini-3.6-flash")
                     response = model.generate_content(prompt)
                     cleaned = response.text.strip().replace("```json", "").replace("```", "").strip()
                     result_json = json.loads(cleaned)
