@@ -298,7 +298,7 @@ st.sidebar.divider()
 # 4-4. 모델 선택
 model_option = st.sidebar.selectbox(
     "🤖 Gemini AI 모델 선택",
-    ["gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
+    ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.1-pro-preview", "gemini-3.5-flash-lite"],
     index=0,
     key="model_option_select"
 )
