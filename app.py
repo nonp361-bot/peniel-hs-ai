@@ -271,7 +271,9 @@ elif feedback_category == "학생용 피드백 버전":
 st.sidebar.divider()
 
 # 4-3. API 키 설정
-api_key = "AQ.Ab8RN6LG4wMEGv9UdwTHANAaM4pSUhmEAZUwbnF6e3KAy8qZXQ"
+# [보안 수정] API 키를 코드에 직접 하드코딩하지 않습니다.
+# api_key.txt 파일 → st.secrets → 사용자 직접 입력 순서로만 안전하게 불러옵니다.
+api_key = ""
 if os.path.exists("api_key.txt"):
     try:
         with open("api_key.txt", "r", encoding="utf-8") as f:
@@ -296,7 +298,7 @@ st.sidebar.divider()
 # 4-4. 모델 선택
 model_option = st.sidebar.selectbox(
     "🤖 Gemini AI 모델 선택",
-    ["gemini-1.5-flash", "gemini-1.5-pro"],
+    ["gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
     index=0,
     key="model_option_select"
 )
@@ -774,6 +776,16 @@ def generate_pdf_report(eval_data, student_filename, mode, fb_type):
             if tf.get('quote'):
                 story.append(Spacer(1, 7))
                 story.append(create_feedback_box("🎯 원문 인용 근거", f"\"{tf['quote']}\"", '#FEF3C7', '#F59E0B', '#451A03'))
+        if "grade3_focus_feedback" in eval_data:
+            story.append(Spacer(1, 10))
+            story.append(Paragraph("🎯 [3학년 진로·자율·행발 집중 피드백]", h1_style))
+            story.append(Spacer(1, 3))
+            g3 = eval_data["grade3_focus_feedback"]
+            story.append(create_feedback_box("📝 종합 총평", g3.get('overall_summary', ''), '#EFF6FF', '#3B82F6', '#1E3A8A'))
+            story.append(Spacer(1, 7))
+            story.append(create_feedback_box("⚠️ 보완 및 수정 필요사항", g3.get('improvements', ''), '#FFFBEB', '#F59E0B', '#78350F'))
+            story.append(Spacer(1, 7))
+            story.append(create_feedback_box("✏️ 수정·보완 추천 문장 예시", g3.get('revision_examples', ''), '#FEF2F2', '#EF4444', '#991B1B'))
         if "student_feedback" in eval_data:
             story.append(Paragraph("🎓 [학생전용 현위치 진단 & 솔루션]", h1_style))
             story.append(Spacer(1, 3))
@@ -839,7 +851,16 @@ def generate_docx_report(eval_data, student_filename, mode, fb_type):
             doc.add_paragraph(f"보완점 및 감점 원인: {tf.get('weakness', '')}")
             if tf.get('quote'):
                 doc.add_paragraph(f"원문 인용 근거: \"{tf['quote']}\"")
-                
+
+        if "grade3_focus_feedback" in eval_data:
+            doc.add_heading("3학년 진로·자율·행발 집중 피드백", level=1)
+            g3 = eval_data["grade3_focus_feedback"]
+            doc.add_paragraph(f"종합 총평: {g3.get('overall_summary', '')}")
+            doc.add_heading("보완 및 수정 필요사항", level=2)
+            doc.add_paragraph(g3.get('improvements', ''))
+            doc.add_heading("수정·보완 추천 문장 예시", level=2)
+            doc.add_paragraph(g3.get('revision_examples', ''))
+
         if "student_feedback" in eval_data:
             doc.add_heading("학생전용 현위치 진단 & 솔루션", level=1)
             sf = eval_data["student_feedback"]
@@ -1044,6 +1065,10 @@ if student_file and api_key:
                     [절대 준수 원칙 - 환각 방지]:
                     - 반드시 생기부 PDF에 실제로 적힌 텍스트 내용만을 근거로 평가하세요. 없는 내용을 만들어내지 마세요.
 
+                    [생기부 문체 규정 - 절대 준수]:
+                    - 생기부는 명사형 종결(예: ~함, ~음, ~보임, ~수행함)로 마무리되는 공식 문서입니다.
+                    - 절대로 "-습니다", "-합니다"와 같은 평서문 종결형으로 고치라는 피드백이나 수정 예시를 제시하지 마세요.
+
                     [핵심 평가 지침 (생기부 종합 전용 피드백)]:
                     1. 평가자 관점: '{evaluator_mode}' 특성 반영.
                     2. 학업(40점)/진로(40점)/공동체(20점) 총 100점 만점으로 점수를 매기세요.
@@ -1053,6 +1078,18 @@ if student_file and api_key:
                        - 학생의 성적 수준(원점수, 과목 평균, 등급 등)에 어울리는 기록인지
                        - AI를 남용한 티(거대 담론 나열, 구체적 사례 부재 등)가 나는지 여부
                     4. 학생에게 앞으로 어떤 방향으로 활동을 보완하고 확장해야 할지 구체적인 지도 방향과 피드백을 제시하세요.
+
+                    [3학년 진로활동·자율활동·행동특성 및 종합의견(행발) 집중 정밀 피드백 - 매우 중요]:
+                    - 업로드된 생기부 텍스트에서 "3학년" 시기의 진로활동, 자율활동, 행동특성 및 종합의견(행발) 기록을 찾아 별도로 집중 검토하세요. (텍스트에 학년 구분이 명확하지 않다면 진로활동·자율활동·행발 전체를 대상으로 하세요.)
+                    - 이 세 영역을 문장 단위로 빠짐없이 전수 점검하여, 아래 관점에서 문제 되는 문장을 모두 찾아내세요. 일부 대표 문장 1~2개만 예시로 들고 넘어가는 것을 금지합니다:
+                      (a) 활동을 나열만 하고 그 과정에서 드러난 구체적 성장이나 역량이 보이지 않는 문장. 단, 활동 주제 자체가 구체적이어서 이미 역량이나 문제의식이 드러나는 문장은 절대 문제 삼지 마세요(과세특 피드백과 동일한 원칙 — 매 문장에 평가어가 붙어야 하는 것은 아닙니다).
+                      (b) 진로와의 연계성이 약하거나 앞뒤 맥락과 동떨어진 활동
+                      (c) AI가 생성한 듯 어색하거나 구체적 사례 없이 추상적인 거대 담론 위주의 서술
+                      (d) 가독성 문제: 수식어구 중첩, 주술 호응 불일치, 목적어 누락, 지나치게 긴 문장
+                      (e) 여러 항목·여러 시기에 걸쳐 반복되는 상투적·복붙성 표현
+                    - 발견한 문제 문장은 "[진로. 문제유형]", "[자율. 문제유형]", "[행발. 문제유형]"처럼 영역별·유형별 소제목으로 구조화하여 grade3_focus_feedback.improvements에 모두 나열하세요. 같은 원인으로 여러 문장이 걸리면 "다음 N개 문장에서 동일한 문제가 발견됨:" 형식으로 그룹으로 묶어 한 번만 설명하세요.
+                    - grade3_focus_feedback.revision_examples에는 improvements에서 지적한 문제 문장에 대해 명사형 종결을 유지한 '수정 전 ➔ 수정 후' 예시를 제시하세요. 완전히 동일한 패턴으로 그룹핑된 문장은 대표 1개만 상세히 보여주고 나머지는 간략히 안내하세요. 텍스트에 학번(또는 이름) 표기가 있다면 improvements와 동일하게 "(학번) 수정 전: '...'" / "(학번) 수정 후: '...'" 형태로 반드시 표기하세요.
+                    - [출력 형식 규정] grade3_focus_feedback.improvements와 revision_examples 모두 절대 줄바꿈 없이 이어붙인 한 덩어리 문단으로 작성하지 마세요. JSON 문자열 안에 실제 줄바꿈 문자(\\n)를 포함시켜 항목 소제목/그룹 설명/문제 문장을 각각 독립된 줄로 작성하고, 서로 다른 항목 사이에는 빈 줄을 넣으세요.
 
                     [학생 제출 텍스트]:
                     {student_text[:8000]}
@@ -1070,6 +1107,11 @@ if student_file and api_key:
                             "strength": "교사 기록의 적절성(관찰, 가독성, 성적 수준 부합도 등) 측면에서의 우수한 장점 서술",
                             "weakness": "교사 기록의 보완점(AI 남용 흔적, 구체적 관찰 부족 등) 및 감점 사유 지적, 그리고 앞으로 학생을 어떤 방향으로 지도해야 할지에 대한 구체적 제언",
                             "quote": "텍스트에서 실제 인용한 핵심 문장"
+                        }},
+                        "grade3_focus_feedback": {{
+                            "overall_summary": "3학년 진로활동·자율활동·행발에 대한 전반적 총평",
+                            "improvements": "▍[진로. 활동 나열에 그침]\\n다음 2개 문장은 구체적 성장이나 역량이 드러나지 않음:\\n1. (해당 시) '진로 탐색 활동에 참여함.'\\n2. (해당 시) '희망 진로와 관련된 활동을 수행함.'\\n\\n▍[행발. 가독성 - 수식어구 중첩]\\n다음 문장에서 수식어가 과도하게 중첩되어 핵심 내용이 바로 읽히지 않음:\\n1. '학급 내 다양한 갈등 상황에서 항상 솔선수범하는 자세로 친구들 사이를 중재하며 배려심 깊은 태도로 급우들의 신뢰를 받았고 이는 이후 자율활동에서도 이어짐.'\\n\\n(실제 응답에서는 [진로]/[자율]/[행발] 각각에서 발견되는 모든 문제 문장을 빠짐없이 담아 작성할 것. '-습니다'체로 고치라는 피드백은 절대 포함하지 말 것)",
+                            "revision_examples": "▍[진로. 활동 나열에 그침]\\n수정 전: '진로 탐색 활동에 참여함.'\\n수정 후: '희망 진로인 데이터 분석가와 관련하여 공공 데이터를 활용한 통계 프로젝트를 기획하고 결과를 시각화하여 발표함.' (막연한 '활동'을 실제 다룬 구체적 내용으로 대체)\\n\\n(improvements에서 정리한 모든 항목에 대해 위와 같은 형식으로 빠짐없이 이어서 작성할 것. 텍스트에 학번이 있다면 각 줄 앞에 반드시 표기할 것)"
                         }}
                     }}
                     """
@@ -1109,7 +1151,7 @@ if student_file and api_key:
                     """
 
                 try:
-                    model = genai.GenerativeModel("gemini-3.6-flash")
+                    model = genai.GenerativeModel(model_option)
                     response = model.generate_content(prompt)
                     cleaned = response.text.strip().replace("```json", "").replace("```", "").strip()
                     result_json = json.loads(cleaned)
@@ -1135,6 +1177,13 @@ if student_file and api_key:
                             for _field in _TEXT_FIELDS:
                                 if _field in result_json[_sub_key]:
                                     result_json[_sub_key][_field] = normalize_feedback_text(result_json[_sub_key][_field])
+                    if "grade3_focus_feedback" in result_json and isinstance(result_json["grade3_focus_feedback"], dict):
+                        _g3 = result_json["grade3_focus_feedback"]
+                        for _field in _TEXT_FIELDS:
+                            if _field in _g3:
+                                _g3[_field] = normalize_feedback_text(_g3[_field])
+                        if "improvements" in _g3 and "revision_examples" in _g3:
+                            _g3["revision_examples"] = inject_student_ids(_g3["improvements"], _g3["revision_examples"])
 
                     st.session_state["eval_result"] = result_json
                     st.session_state["evaluated_filename"] = student_file.name
@@ -1230,6 +1279,14 @@ if "eval_result" in st.session_state:
             st.warning(f"**⚠️ 보완점 및 감점 사유:** {tf.get('weakness', '')}")
             if tf.get('quote'):
                 st.info(f"**🎯 원문 인용 근거:** \"{tf.get('quote')}\"")
+
+        if "grade3_focus_feedback" in res:
+            st.divider()
+            st.subheader("🎯 3학년 진로·자율·행발 집중 피드백")
+            g3 = res["grade3_focus_feedback"]
+            st.info(f"**📝 종합 총평:**\n\n{g3.get('overall_summary', '')}")
+            st.warning(f"**⚠️ 보완 및 수정 필요사항:**\n\n{g3.get('improvements', '')}")
+            st.error(f"**✏️ 수정·보완 추천 문장 예시:**\n\n{g3.get('revision_examples', '')}")
 
         if "student_feedback" in res:
             st.subheader("🎓 학생 전용 쓴소리 진단 및 탐구 솔루션 리포트")
